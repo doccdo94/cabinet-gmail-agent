@@ -1,6 +1,6 @@
 {
   "name": "gmail-agent-cabinet",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Agent email temps réel — Cabinet 24 Silvestri",
   "main": "index.js",
   "scripts": {

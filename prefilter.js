@@ -93,12 +93,14 @@ function preFilter(msg) {
   }
 
   // 2. Répondeur OVH (transcriptions vocales)
-  if (fromContains(from, "repondeur")) {
+  // Détecte : "repondeur" dans le nom d'affichage OU adresse ovhcloud
+  const estRepondeur = fromContains(from, "repondeur") || fromContains(from, "ovhcloud");
+  if (estRepondeur) {
     return {
       labels:    ["Répondeur à traiter", "À traiter"],
       skipAI:    true,
       categorie: "repondeur",
-      raison:    "Message vocal OVH"
+      raison:    "Message vocal OVH — pas de brouillon"
     };
   }
 

@@ -1,7 +1,8 @@
 // ============================================================
 // index.js — Serveur Express principal
-// Cabinet 24 Silvestri — Gmail Agent v2.0 (Session 2)
-// Nouveauté : pré-filtre règles + application labels Gmail
+// Cabinet 24 Silvestri — Gmail Agent v3.0 (Session 3)
+// Nouveauté : Claude Sonnet classification + Haiku brouillons
+//             + index patients Doctolib (Google Sheets)
 // ============================================================
 
 require('dotenv').config();
@@ -13,8 +14,12 @@ const {
   decodeWebhook,
   getNewMessages,
   applyLabel,
+  createDraft,
+  getOAuth2Client,  // exposé pour sheets.js
 } = require('./gmail');
-const { preFilter } = require('./prefilter');
+const { preFilter }                  = require('./prefilter');
+const { classifyEmail, genererBrouillon } = require('./claude');
+const { findPatient }                = require('./sheets');
 
 const app = express();
 app.use(express.json());
@@ -24,27 +29,26 @@ const PORT = process.env.PORT || 3000;
 // ── STATE ─────────────────────────────────────────────────────
 let lastHistoryId = null;
 const processedMessageIds = new Set();
-
-// Compteurs session (remis à zéro au redémarrage)
-const stats = { total: 0, connus: 0, inconnus: 0, errors: 0 };
+const stats = {
+  total: 0, prefiltre: 0, claude: 0,
+  brouillons: 0, urgences: 0, errors: 0
+};
 
 // ── HEALTH CHECK ──────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({
-    status:        'ok',
-    service:       'gmail-agent-cabinet-s2',
-    version:       '2.0.0',
+    status:    'ok',
+    service:   'gmail-agent-cabinet-s3',
+    version:   '3.0.0',
     lastHistoryId,
-    uptime:        Math.floor(process.uptime()) + 's',
-    timestamp:     new Date().toISOString(),
+    uptime:    Math.floor(process.uptime()) + 's',
+    timestamp: new Date().toISOString(),
     stats,
   });
 });
 
 // ── AUTH GMAIL ────────────────────────────────────────────────
-app.get('/auth/gmail', (_req, res) => {
-  res.redirect(getAuthUrl());
-});
+app.get('/auth/gmail', (_req, res) => res.redirect(getAuthUrl()));
 
 app.get('/auth/callback', async (req, res) => {
   const { code, error } = req.query;
@@ -70,7 +74,7 @@ app.get('/watch/start', async (_req, res) => {
     const result     = await renewWatch();
     const expiration = new Date(parseInt(result.expiration)).toLocaleString('fr-FR');
     lastHistoryId    = result.historyId;
-    console.log(`[watch] Démarré — expire le ${expiration} — historyId: ${lastHistoryId}`);
+    console.log(`[watch] Démarré — expire le ${expiration}`);
     res.json({ ok: true, expiration, historyId: result.historyId });
   } catch (err) {
     console.error('[watch] Erreur:', err.message);
@@ -80,7 +84,7 @@ app.get('/watch/start', async (_req, res) => {
 
 // ── WEBHOOK GMAIL (Pub/Sub push) ──────────────────────────────
 app.post('/webhook/gmail', async (req, res) => {
-  res.sendStatus(200); // répondre immédiatement
+  res.sendStatus(200);
 
   try {
     const notification = decodeWebhook(req.body);
@@ -125,32 +129,70 @@ async function processEmail(msg) {
   console.log(`[email] Sujet : ${msg.subject}`);
 
   try {
+
     // ── COUCHE 1 : pré-filtre règles (0 token AI) ─────────────
     const decision = preFilter(msg);
 
     if (decision) {
-      stats.connus++;
-      console.log(`[filtre] ${decision.categorie} — ${decision.raison}`);
-      console.log(`[filtre] Labels : ${decision.labels.join(', ')}`);
-
-      // Appliquer tous les labels en parallèle
+      stats.prefiltre++;
+      console.log(`[prefiltre] ${decision.categorie} — ${decision.raison}`);
       await Promise.all(decision.labels.map(l => applyLabel(msg.id, l)));
-      console.log(`[filtre] Labels appliqués`);
+      console.log(`[prefiltre] Labels appliqués : ${decision.labels.join(', ')}`);
+      return; // traitement terminé, pas d'appel Claude
+    }
 
-    } else {
-      // ── COUCHE 2 : inconnu → Claude Sonnet (S3) ───────────
-      stats.inconnus++;
-      console.log(`[filtre] Inconnu → en attente Claude S3`);
-      console.log(`[filtre] Corps : ${msg.body.substring(0, 100)}...`);
-      // S3 : await classifyWithClaude(msg);
+    // ── COUCHE 2 : Claude Sonnet — classification ─────────────
+    stats.claude++;
+    console.log(`[claude] Classification en cours...`);
+    const classif = await classifyEmail(msg);
+    console.log(`[claude] Catégorie : ${classif.categorie} — ${classif.raison}`);
+
+    // Appliquer le label si précisé
+    if (classif.label_gmail) {
+      await applyLabel(msg.id, classif.label_gmail);
+      console.log(`[claude] Label appliqué : ${classif.label_gmail}`);
+    }
+
+    // ── COUCHE 3 : Brouillon patient (Haiku) ──────────────────
+    if (classif.generer_brouillon) {
+
+      // Chercher le patient dans l'index Doctolib
+      const emailAddr = extractEmail(msg.from);
+      const auth      = getOAuth2Client();
+      const patient   = await findPatient(emailAddr, auth);
+
+      if (patient) {
+        console.log(`[sheets] Patient trouvé : ${patient.first_name} ${patient.last_name}`);
+      } else {
+        console.log(`[sheets] Patient inconnu : ${emailAddr}`);
+      }
+
+      const brouillon = await genererBrouillon(msg, patient);
+      await createDraft(msg.from, `Re: ${msg.subject}`, brouillon, msg.threadId);
+      await applyLabel(msg.id, 'Brouillon IA');
+      stats.brouillons++;
+      console.log(`[claude] Brouillon créé — ${patient ? 'personnalisé' : 'générique'}`);
+    }
+
+    // ── Urgence : log marqué (SMS mis de côté pour l'instant) ─
+    if (classif.urgence) {
+      stats.urgences++;
+      console.warn(`[URGENT] ${msg.from} — ${msg.subject}`);
+      // S4 optionnel : await envoyerSMS(...)
     }
 
   } catch (err) {
     stats.errors++;
-    console.error(`[email] Erreur traitement : ${err.message}`);
+    console.error(`[email] Erreur : ${err.message}`);
   }
 
   console.log('─'.repeat(60));
+}
+
+// ── UTILITAIRE ────────────────────────────────────────────────
+function extractEmail(from) {
+  const match = from.match(/<(.+?)>/);
+  return (match ? match[1] : from).toLowerCase().trim();
 }
 
 // ── RENOUVELLEMENT AUTOMATIQUE DU WATCH ──────────────────────
@@ -168,7 +210,7 @@ setInterval(async () => {
 app.listen(PORT, () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
-  console.log(`  Session 2 — Pré-filtre règles + Labels Gmail`);
+  console.log(`  Session 3 — Claude Sonnet + Haiku + Sheets`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 });

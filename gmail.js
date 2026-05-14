@@ -1,6 +1,6 @@
 // ============================================================
 // gmail.js — Auth OAuth2 + lecture emails + labels + brouillons
-// Cabinet 24 Silvestri — Gmail Agent v1.0 (Session 1)
+// Cabinet 24 Silvestri — Gmail Agent v3.0 (Session 3)
 // ============================================================
 
 const { google } = require('googleapis');
@@ -217,6 +217,8 @@ function buildRawEmail(to, subject, body) {
   return Buffer.from(email).toString('base64url');
 }
 
+function getOAuth2Client() { return oauth2Client; }
+
 module.exports = {
   getAuthUrl,
   handleCallback,
@@ -226,4 +228,5 @@ module.exports = {
   getEmailContent,
   applyLabel,
   createDraft,
+  getOAuth2Client,
 };

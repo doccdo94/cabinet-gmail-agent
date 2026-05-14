@@ -238,7 +238,23 @@ app.get('/test/repondeur', async (req, res) => {
 
   try {
     console.log(`[test] Traitement forcé du message : ${id}`);
-    const msg  = await getEmailContent(id);
+
+    // Tenter d'abord comme messageId, sinon chercher via threadId
+    let msg;
+    try {
+      msg = await getEmailContent(id);
+    } catch (e) {
+      // Probablement un threadId — récupérer le premier message du thread
+      console.log(`[test] ID invalide comme messageId, tentative threadId...`);
+      const { google } = require('googleapis');
+      const auth = getOAuth2Client();
+      const gmail = google.gmail({ version: 'v1', auth });
+      const thread = await gmail.users.threads.get({ userId: 'me', id });
+      const firstMsgId = thread.data.messages?.[0]?.id;
+      if (!firstMsgId) throw new Error('Thread vide ou introuvable');
+      console.log(`[test] Message ID trouvé : ${firstMsgId}`);
+      msg = await getEmailContent(firstMsgId);
+    }
     const auth = getOAuth2Client();
     const patientsMap = await getPatientMap(auth);
 

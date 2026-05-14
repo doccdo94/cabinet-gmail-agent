@@ -144,9 +144,10 @@ async function extractAttachments(payload, messageId) {
 
   async function walk(part) {
     if (part.filename && part.body) {
+      // Filtre élargi : accepter tout fichier avec attachmentId (OVH envoie sans extension)
       const isAudio = AUDIO_TYPES.some(t => (part.mimeType || '').startsWith(t))
-                   || /\.(mp3|wav|ogg|mp4|m4a|flac)$/i.test(part.filename);
-      if (!isAudio) return;
+                   || /\.(mp3|wav|ogg|mp4|m4a|flac)$/i.test(part.filename)
+                   || !!part.body.attachmentId; // toute PJ avec un ID = probablement audio
 
       let data = part.body.data; // inline base64
       if (!data && part.body.attachmentId) {

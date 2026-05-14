@@ -88,6 +88,7 @@ let telIndex = null;
 function buildTelIndex(patientsMap) {
   if (telIndex) return telIndex;
   telIndex = new Map();
+  if (!patientsMap) return telIndex;
   for (const patient of patientsMap.values()) {
     if (patient.phone) {
       const normalized = normaliserNumero(patient.phone);

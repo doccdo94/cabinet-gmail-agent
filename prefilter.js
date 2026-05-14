@@ -1,8 +1,9 @@
 // ============================================================
 // prefilter.js — Pré-filtre règles (0 token AI)
-// Cabinet 24 Silvestri — Gmail Agent v2.0 (Session 2)
+// Cabinet 24 Silvestri — Gmail Agent v3.1
 // Retourne une décision si l'expéditeur est connu,
-// null si inconnu → sera traité par Claude en S3
+// null si inconnu → sera traité par Claude
+// Gère aussi le label "À traiter" et "Répondeur à traiter"
 // ============================================================
 
 // ── LISTES D'ADRESSES ─────────────────────────────────────────
@@ -91,16 +92,20 @@ function preFilter(msg) {
     };
   }
 
-  // 2. Répondeur OVH (transcriptions vocales) → traiter comme patient
-  // Le répondeur passe volontairement au traitement IA en S3
+  // 2. Répondeur OVH (transcriptions vocales)
   if (fromContains(from, "repondeur")) {
-    return null;
+    return {
+      labels:    ["Répondeur à traiter", "À traiter"],
+      skipAI:    true,
+      categorie: "repondeur",
+      raison:    "Message vocal OVH"
+    };
   }
 
   // 3. Correspondant clinique connu
   if (CORRESPONDANTS.some(a => fromContains(email, a))) {
     return {
-      labels:    ["Correspondants"],
+      labels:    ["Correspondants", "À traiter"],
       skipAI:    true,
       categorie: "correspondant",
       raison:    `Correspondant clinique : ${email}`

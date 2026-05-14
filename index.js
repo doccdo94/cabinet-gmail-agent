@@ -1,6 +1,6 @@
 // ============================================================
 // index.js — Serveur Express principal
-// Cabinet 24 Silvestri — Gmail Agent v3.0 (Session 3)
+// Cabinet 24 Silvestri — Gmail Agent v3.1
 // Nouveauté : Claude Sonnet classification + Haiku brouillons
 //             + index patients Doctolib (Google Sheets)
 // ============================================================
@@ -38,8 +38,8 @@ const stats = {
 app.get('/health', (_req, res) => {
   res.json({
     status:    'ok',
-    service:   'gmail-agent-cabinet-s3',
-    version:   '3.0.0',
+    service:   'gmail-agent-cabinet-v3.1',
+    version:   '3.1.0',
     lastHistoryId,
     uptime:    Math.floor(process.uptime()) + 's',
     timestamp: new Date().toISOString(),
@@ -170,6 +170,7 @@ async function processEmail(msg) {
       const brouillon = await genererBrouillon(msg, patient);
       await createDraft(msg.from, `Re: ${msg.subject}`, brouillon, msg.threadId);
       await applyLabel(msg.id, 'Brouillon IA');
+      await applyLabel(msg.id, 'À traiter');
       stats.brouillons++;
       console.log(`[claude] Brouillon créé — ${patient ? 'personnalisé' : 'générique'}`);
     }
@@ -210,7 +211,7 @@ setInterval(async () => {
 app.listen(PORT, () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
-  console.log(`  Session 3 — Claude Sonnet + Haiku + Sheets`);
+  console.log(`  v3.1 — Claude Sonnet + Haiku + Sheets + À traiter`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 });

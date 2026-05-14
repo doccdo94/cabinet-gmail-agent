@@ -231,30 +231,35 @@ setInterval(async () => {
 }, 6 * 24 * 60 * 60 * 1000);
 
 // ── ENDPOINT TEST RÉPONDEUR ──────────────────────────────────
-// GET /test/repondeur?id=MESSAGE_ID_GMAIL
+// GET /test/repondeur?numero=0782481900
+// ou GET /test/repondeur?sujet=Message+vocal+du
 app.get('/test/repondeur', async (req, res) => {
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ error: 'Paramètre id manquant' });
+  const { numero, sujet } = req.query;
+  if (!numero && !sujet) {
+    return res.status(400).json({ error: 'Paramètre numero ou sujet manquant. Ex: ?numero=0782481900' });
+  }
 
   try {
-    console.log(`[test] Traitement forcé du message : ${id}`);
+    const { google } = require('googleapis');
+    const auth  = getOAuth2Client();
+    const gmail = google.gmail({ version: 'v1', auth });
 
-    // Tenter d'abord comme messageId, sinon chercher via threadId
-    let msg;
-    try {
-      msg = await getEmailContent(id);
-    } catch (e) {
-      // Probablement un threadId — récupérer le premier message du thread
-      console.log(`[test] ID invalide comme messageId, tentative threadId...`);
-      const { google } = require('googleapis');
-      const auth = getOAuth2Client();
-      const gmail = google.gmail({ version: 'v1', auth });
-      const thread = await gmail.users.threads.get({ userId: 'me', id });
-      const firstMsgId = thread.data.messages?.[0]?.id;
-      if (!firstMsgId) throw new Error('Thread vide ou introuvable');
-      console.log(`[test] Message ID trouvé : ${firstMsgId}`);
-      msg = await getEmailContent(firstMsgId);
+    // Chercher le message par sujet dans Gmail
+    const query = numero
+      ? `subject:"Message vocal du ${numero}"`
+      : `subject:"${sujet}"`;
+
+    console.log(`[test] Recherche : ${query}`);
+    const listRes = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 1 });
+    const messages = listRes.data.messages || [];
+
+    if (messages.length === 0) {
+      return res.status(404).json({ error: `Aucun message trouvé pour : ${query}` });
     }
+
+    const msgId = messages[0].id;
+    console.log(`[test] Message trouvé : ${msgId}`);
+    const msg = await getEmailContent(msgId);
     const auth = getOAuth2Client();
     const patientsMap = await getPatientMap(auth);
 

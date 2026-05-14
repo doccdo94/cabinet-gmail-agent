@@ -246,8 +246,8 @@ app.get('/test/repondeur', async (req, res) => {
 
     // Chercher le message par sujet dans Gmail
     const query = numero
-      ? `subject:"Message vocal du ${numero}"`
-      : `subject:"${sujet}"`;
+      ? `subject:"Message vocal du ${numero}" in:anywhere`
+      : `subject:"${sujet}" in:anywhere`;
 
     console.log(`[test] Recherche : ${query}`);
     const listRes = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 1 });

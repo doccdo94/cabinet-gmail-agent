@@ -229,6 +229,39 @@ setInterval(async () => {
   }
 }, 6 * 24 * 60 * 60 * 1000);
 
+// ── ENDPOINT TEST RÉPONDEUR ──────────────────────────────────
+// GET /test/repondeur?id=MESSAGE_ID_GMAIL
+app.get('/test/repondeur', async (req, res) => {
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ error: 'Paramètre id manquant' });
+
+  try {
+    console.log(`[test] Traitement forcé du message : ${id}`);
+    const msg  = await getEmailContent(id);
+    const auth = getOAuth2Client();
+    const patientsMap = await getPatientMap(auth);
+
+    const result = await traiterRepondeur(msg, patientsMap, {
+      replyEmail,
+      applyLabelFn: (msgId, label) => applyLabel(msgId, label),
+    });
+
+    if (result) {
+      res.json({
+        ok:           true,
+        identite:     result.identite || 'Patient inconnu',
+        numero:       result.numero,
+        transcription: result.transcription,
+      });
+    } else {
+      res.json({ ok: false, message: 'Aucune PJ audio trouvée dans ce message' });
+    }
+  } catch (err) {
+    console.error(`[test] Erreur : ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ALERTE FACTURES ──────────────────────────────────────────
 // Appelé par cron-job.org chaque lundi à 8h
 // URL à configurer : GET /alertes/factures

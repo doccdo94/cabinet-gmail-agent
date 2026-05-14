@@ -219,6 +219,46 @@ function buildRawEmail(to, subject, body) {
 
 function getOAuth2Client() { return oauth2Client; }
 
+// ── RECHERCHE FACTURES NON LUES ───────────────────────────────
+async function getUnreadFactures() {
+  const res = await gmail.users.messages.list({
+    userId: 'me',
+    q: 'label:Factures is:unread',
+    maxResults: 30,
+  });
+
+  const messages = res.data.messages || [];
+  const details  = [];
+
+  for (const m of messages) {
+    const msg = await gmail.users.messages.get({
+      userId: 'me',
+      id: m.id,
+      format: 'metadata',
+      metadataHeaders: ['From', 'Subject', 'Date'],
+    });
+    const h = msg.data.payload.headers;
+    const get = (name) => h.find(x => x.name === name)?.value || '';
+    details.push({
+      from:    get('From').replace(/<.*>/, '').trim(),
+      subject: get('Subject'),
+      date:    new Date(parseInt(msg.data.internalDate)).toLocaleDateString('fr-FR'),
+    });
+  }
+
+  return details;
+}
+
+// ── ENVOI EMAIL D'ALERTE ──────────────────────────────────────
+async function sendAlertEmail(subject, body) {
+  const to  = process.env.GMAIL_ADDRESS;
+  const raw = buildRawEmail(to, subject, body);
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: { raw },
+  });
+}
+
 module.exports = {
   getAuthUrl,
   handleCallback,
@@ -229,4 +269,6 @@ module.exports = {
   applyLabel,
   createDraft,
   getOAuth2Client,
+  getUnreadFactures,
+  sendAlertEmail,
 };

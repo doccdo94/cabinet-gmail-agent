@@ -15,7 +15,9 @@ const {
   getNewMessages,
   applyLabel,
   createDraft,
-  getOAuth2Client,  // exposé pour sheets.js
+  getOAuth2Client,
+  getUnreadFactures,
+  sendAlertEmail,
 } = require('./gmail');
 const { preFilter }                  = require('./prefilter');
 const { classifyEmail, genererBrouillon } = require('./claude');
@@ -206,6 +208,35 @@ setInterval(async () => {
     console.error('[watch] Échec renouvellement:', err.message);
   }
 }, 6 * 24 * 60 * 60 * 1000);
+
+// ── ALERTE FACTURES ──────────────────────────────────────────
+// Appelé par cron-job.org chaque lundi à 8h
+// URL à configurer : GET /alertes/factures
+app.get('/alertes/factures', async (_req, res) => {
+  try {
+    const factures = await getUnreadFactures();
+
+    if (factures.length === 0) {
+      console.log('[factures] Aucune facture non lue');
+      return res.json({ ok: true, count: 0 });
+    }
+
+    let corps = `${factures.length} facture(s) fournisseur non lue(s) :\n\n`;
+    for (const f of factures) {
+      corps += `- [${f.date}] ${f.from} — ${f.subject}\n`;
+    }
+    corps += '\n→ Consultez le label Factures dans Gmail.';
+
+    const sujet = `${factures.length} facture(s) à traiter — ${new Date().toLocaleDateString('fr-FR')}`;
+    await sendAlertEmail(sujet, corps);
+
+    console.log(`[factures] Alerte envoyée — ${factures.length} facture(s)`);
+    res.json({ ok: true, count: factures.length });
+  } catch (err) {
+    console.error('[factures] Erreur:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── DÉMARRAGE ─────────────────────────────────────────────────
 app.listen(PORT, async () => {

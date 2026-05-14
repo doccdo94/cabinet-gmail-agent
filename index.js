@@ -101,6 +101,23 @@ app.post('/webhook/gmail', async (req, res) => {
     if (!lastHistoryId) {
       lastHistoryId = historyId;
       console.log(`[webhook] Init historyId: ${historyId}`);
+      // ── RÉPONDEUR : transcription Speech-to-Text ───────────
+      if (decision.categorie === 'repondeur') {
+        try {
+          const auth        = getOAuth2Client();
+          const patientsMap = await getPatientMap(auth);
+          const result      = await traiterRepondeur(msg, patientsMap, {
+            sendToSelf: (sujet, text, html) => sendAlertEmail(sujet, text, html),
+            applyLabelFn:  (id, label) => applyLabel(id, label),
+          });
+          if (result) {
+            console.log(`[repondeur] Transcrit : ${result.identite || 'patient inconnu'}`);
+          }
+        } catch (err) {
+          console.error(`[repondeur] Erreur transcription : ${err.message}`);
+        }
+      }
+
       return;
     }
 
@@ -143,23 +160,6 @@ async function processEmail(msg) {
       console.log(`[prefiltre] ${decision.categorie} — ${decision.raison}`);
       await Promise.all(decision.labels.map(l => applyLabel(msg.id, l)));
       console.log(`[prefiltre] Labels appliqués : ${decision.labels.join(', ')}`);
-
-      // ── RÉPONDEUR : transcription Speech-to-Text ───────────
-      if (decision.categorie === 'repondeur') {
-        try {
-          const auth      = getOAuth2Client();
-          const patientsMap = await getPatientMap(auth);
-          const result    = await traiterRepondeur(msg, patientsMap, {
-            sendToSelf: (sujet, text, html) => sendAlertEmail(sujet, text, html),
-            applyLabelFn: (id, label) => applyLabel(id, label),
-          });
-          if (result) {
-            console.log(`[repondeur] Transcrit : ${result.identite || 'patient inconnu'}`);
-          }
-        } catch (err) {
-          console.error(`[repondeur] Erreur transcription : ${err.message}`);
-        }
-      }
 
       return;
     }
@@ -361,7 +361,7 @@ app.get('/alertes/factures', async (_req, res) => {
 app.listen(PORT, async () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
-  console.log(`  v3.2 — + Transcription répondeur OVH`);
+  console.log(`  v3.2 — Transcription répondeur OVH intégrée`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 

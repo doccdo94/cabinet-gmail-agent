@@ -107,4 +107,9 @@ function invalidateCache() {
   cacheTime = 0;
 }
 
-module.exports = { findPatient, invalidateCache };
+// Expose le Map complet pour la transcription (index téléphone)
+async function getPatientMap(auth) {
+  return await loadPatients(auth);
+}
+
+module.exports = { findPatient, invalidateCache, getPatientMap };

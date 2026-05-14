@@ -123,14 +123,55 @@ async function getEmailContent(messageId) {
   const date    = getHeader('Date');
   const body    = extractBody(msg.payload);
 
+  // Extraire les pièces jointes audio (pour répondeur)
+  const attachments = await extractAttachments(msg.payload, messageId);
+
   return {
-    id:       messageId,
-    threadId: msg.threadId,
+    id:          messageId,
+    threadId:    msg.threadId,
     from,
     subject,
     date,
-    body: cleanBody(body),
+    body:        cleanBody(body),
+    attachments, // [{name, size, data (base64), mimeType}]
   };
+}
+
+// ── EXTRAIRE LES PIÈCES JOINTES ───────────────────────────────
+async function extractAttachments(payload, messageId) {
+  const attachments = [];
+  const AUDIO_TYPES = ['audio/', 'application/octet-stream'];
+
+  async function walk(part) {
+    if (part.filename && part.body) {
+      const isAudio = AUDIO_TYPES.some(t => (part.mimeType || '').startsWith(t))
+                   || /\.(mp3|wav|ogg|mp4|m4a|flac)$/i.test(part.filename);
+      if (!isAudio) return;
+
+      let data = part.body.data; // inline base64
+      if (!data && part.body.attachmentId) {
+        // Télécharger depuis Gmail
+        const att = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId,
+          id: part.body.attachmentId,
+        });
+        data = att.data.data;
+      }
+      if (data) {
+        attachments.push({
+          name:     part.filename,
+          size:     part.body.size || 0,
+          mimeType: part.mimeType,
+          data:     data.replace(/-/g, '+').replace(/_/g, '/'), // base64 standard
+        });
+      }
+    }
+    for (const sub of part.parts || []) await walk(sub);
+  }
+
+  await walk(payload);
+  return attachments;
 }
 
 // ── EXTRAIRE LE CORPS TEXTE ───────────────────────────────────
@@ -171,6 +212,41 @@ async function applyLabel(messageId, labelName) {
     userId: 'me',
     id: messageId,
     requestBody: { addLabelIds: [labelId] },
+  });
+}
+
+// ── RÉPONDRE À UN EMAIL ───────────────────────────────────────
+async function replyEmail(messageId, to, subject, textBody, htmlBody) {
+  // Construire un email multipart avec text + html
+  const boundary = 'boundary_cabinet_24';
+  const raw = [
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    textBody,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    htmlBody,
+    '',
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  // Récupérer le threadId depuis le messageId
+  const msg = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'minimal' });
+
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw:      Buffer.from(raw).toString('base64url'),
+      threadId: msg.data.threadId,
+    },
   });
 }
 
@@ -271,4 +347,5 @@ module.exports = {
   getOAuth2Client,
   getUnreadFactures,
   sendAlertEmail,
+  replyEmail,
 };

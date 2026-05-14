@@ -18,10 +18,12 @@ const {
   getOAuth2Client,
   getUnreadFactures,
   sendAlertEmail,
+  replyEmail,
 } = require('./gmail');
 const { preFilter }                  = require('./prefilter');
 const { classifyEmail, genererBrouillon } = require('./claude');
-const { findPatient }                = require('./sheets');
+const { findPatient, getPatientMap } = require('./sheets');
+const { traiterRepondeur }           = require('./transcription');
 
 const app = express();
 app.use(express.json());
@@ -40,8 +42,8 @@ const stats = {
 app.get('/health', (_req, res) => {
   res.json({
     status:    'ok',
-    service:   'gmail-agent-cabinet-v3.1',
-    version:   '3.1.0',
+    service:   'gmail-agent-cabinet-v3.2',
+    version:   '3.2.0',
     lastHistoryId,
     uptime:    Math.floor(process.uptime()) + 's',
     timestamp: new Date().toISOString(),
@@ -140,7 +142,25 @@ async function processEmail(msg) {
       console.log(`[prefiltre] ${decision.categorie} — ${decision.raison}`);
       await Promise.all(decision.labels.map(l => applyLabel(msg.id, l)));
       console.log(`[prefiltre] Labels appliqués : ${decision.labels.join(', ')}`);
-      return; // traitement terminé, pas d'appel Claude
+
+      // ── RÉPONDEUR : transcription Speech-to-Text ───────────
+      if (decision.categorie === 'repondeur') {
+        try {
+          const auth      = getOAuth2Client();
+          const patientsMap = await getPatientMap(auth);
+          const result    = await traiterRepondeur(msg, patientsMap, {
+            replyEmail,
+            applyLabelFn: (id, label) => applyLabel(id, label),
+          });
+          if (result) {
+            console.log(`[repondeur] Transcrit : ${result.identite || 'patient inconnu'}`);
+          }
+        } catch (err) {
+          console.error(`[repondeur] Erreur transcription : ${err.message}`);
+        }
+      }
+
+      return;
     }
 
     // ── COUCHE 2 : Claude Sonnet — classification ─────────────
@@ -242,7 +262,7 @@ app.get('/alertes/factures', async (_req, res) => {
 app.listen(PORT, async () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
-  console.log(`  v3.1 — Claude Sonnet + Haiku + Sheets + À traiter`);
+  console.log(`  v3.2 — + Transcription répondeur OVH`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 

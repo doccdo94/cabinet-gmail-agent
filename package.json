@@ -1,18 +1,16 @@
 {
-  "name": "synthese-prothese",
-  "version": "1.0.0",
-  "description": "Synthèse IA de traitements prothétiques — Cabinet 24 Silvestri",
-  "main": "server.js",
-  "type": "module",
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "name": "gmail-agent-cabinet",
+  "version": "3.1.0",
+  "description": "Agent email temps réel — Cabinet 24 Silvestri",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
-    "busboy": "^1.6.0",
-    "express": "^4.19.2"
-  }
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0"
+  },
+  "type": "commonjs"
 }

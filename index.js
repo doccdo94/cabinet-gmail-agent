@@ -16,6 +16,7 @@ const {
   applyLabel,
   createDraft,
   getOAuth2Client,
+  getEmailContent,
   getUnreadFactures,
   sendAlertEmail,
   replyEmail,

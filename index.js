@@ -241,8 +241,8 @@ app.get('/test/repondeur', async (req, res) => {
 
   try {
     const { google } = require('googleapis');
-    const auth  = getOAuth2Client();
-    const gmail = google.gmail({ version: 'v1', auth });
+    const testAuth  = getOAuth2Client();
+    const gmail = google.gmail({ version: 'v1', auth: testAuth });
 
     // Chercher le message par sujet dans Gmail
     const query = numero
@@ -260,8 +260,8 @@ app.get('/test/repondeur', async (req, res) => {
     const msgId = messages[0].id;
     console.log(`[test] Message trouvé : ${msgId}`);
     const msg = await getEmailContent(msgId);
-    const auth = getOAuth2Client();
-    const patientsMap = await getPatientMap(auth);
+    const auth2 = getOAuth2Client();
+    const patientsMap = await getPatientMap(auth2);
 
     const result = await traiterRepondeur(msg, patientsMap, {
       replyEmail,

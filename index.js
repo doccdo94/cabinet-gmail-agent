@@ -148,7 +148,9 @@ async function processEmail(msg) {
       if (decision.categorie === 'repondeur') {
         try {
           const authR       = getOAuth2Client();
-          const patientsMap = await getPatientMap(authR);
+          let patientsMap   = null;
+          try { patientsMap = await getPatientMap(authR); } 
+          catch (sheetsErr) { console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`); }
           const result      = await traiterRepondeur(msg, patientsMap, {
             sendToSelf:   (sujet, text, html) => sendAlertEmail(sujet, text, html),
             applyLabelFn: (id, label) => applyLabel(id, label),

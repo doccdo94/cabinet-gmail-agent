@@ -152,12 +152,20 @@ async function extractAttachments(payload, messageId) {
       let data = part.body.data; // inline base64
       if (!data && part.body.attachmentId) {
         // Télécharger depuis Gmail
-        const att = await gmail.users.messages.attachments.get({
-          userId: 'me',
-          messageId,
-          id: part.body.attachmentId,
-        });
-        data = att.data.data;
+        console.log(`[attach] Téléchargement PJ : msgId=${messageId} attId=${part.body.attachmentId.substring(0,20)}...`);
+        try {
+          const att = await gmail.users.messages.attachments.get({
+            userId: 'me',
+            messageId,
+            id: part.body.attachmentId,
+          });
+          data = att.data.data;
+          console.log(`[attach] PJ téléchargée : ${data?.length || 0} chars base64`);
+        } catch (attErr) {
+          console.error(`[attach] Erreur get attachment : ${attErr.message} (code: ${attErr.code})`);
+          // Fallback : essayer avec le messageId du thread
+          throw attErr;
+        }
       }
       if (data) {
         attachments.push({

@@ -259,7 +259,51 @@ app.get('/test/repondeur', async (req, res) => {
 
     const msgId = messages[0].id;
     console.log(`[test] Message trouvé : ${msgId}`);
-    const msg = await getEmailContent(msgId);
+
+    // Lire directement via Gmail API sans passer par getEmailContent
+    const { google: googleLib } = require('googleapis');
+    const directAuth = getOAuth2Client();
+    const gmailDirect = googleLib.gmail({ version: 'v1', auth: directAuth });
+    const rawMsg = await gmailDirect.users.messages.get({
+      userId: 'me',
+      id: msgId,
+      format: 'full',
+    });
+
+    const headers = rawMsg.data.payload.headers;
+    const getH = (n) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || '';
+
+    // Extraire les pièces jointes audio
+    const attachments = [];
+    async function walkParts(part) {
+      if (part.filename && /\.(mp3|wav|ogg|m4a|flac)$/i.test(part.filename)) {
+        let data = part.body?.data;
+        if (!data && part.body?.attachmentId) {
+          const att = await gmailDirect.users.messages.attachments.get({
+            userId: 'me', messageId: msgId, id: part.body.attachmentId,
+          });
+          data = att.data.data;
+        }
+        if (data) attachments.push({
+          name: part.filename,
+          size: part.body.size || 0,
+          data: data.replace(/-/g, '+').replace(/_/g, '/'),
+        });
+      }
+      for (const sub of part.parts || []) await walkParts(sub);
+    }
+    await walkParts(rawMsg.data.payload);
+    console.log(`[test] PJ audio trouvées : ${attachments.length}`);
+
+    const msg = {
+      id:          msgId,
+      threadId:    rawMsg.data.threadId,
+      from:        getH('From'),
+      subject:     getH('Subject'),
+      date:        getH('Date'),
+      body:        '',
+      attachments,
+    };
     const auth2 = getOAuth2Client();
     const patientsMap = await getPatientMap(auth2);
 

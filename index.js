@@ -150,7 +150,7 @@ async function processEmail(msg) {
           const auth      = getOAuth2Client();
           const patientsMap = await getPatientMap(auth);
           const result    = await traiterRepondeur(msg, patientsMap, {
-            replyEmail,
+            sendToSelf: (sujet, text, html) => sendAlertEmail(sujet, text, html),
             applyLabelFn: (id, label) => applyLabel(id, label),
           });
           if (result) {

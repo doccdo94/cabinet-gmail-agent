@@ -109,7 +109,7 @@ function identifierAppelant(numero, patientsMap) {
 // msg         : email complet (avec .attachments depuis Gmail API)
 // patientsMap : Map email→patient depuis sheets.js
 // gmail       : fonctions gmail.js (createDraft, replyEmail)
-async function traiterRepondeur(msg, patientsMap, { replyEmail, applyLabelFn }) {
+async function traiterRepondeur(msg, patientsMap, { sendToSelf, applyLabelFn }) {
   const sujet  = msg.subject || '';
   const numero = extraireNumero(sujet);
 
@@ -140,10 +140,13 @@ async function traiterRepondeur(msg, patientsMap, { replyEmail, applyLabelFn }) 
   // Transcrire
   let transcription;
   try {
+    console.log(`[repondeur] Appel Speech-to-Text...`);
     const ext = pj.name.split('.').pop().toLowerCase();
+    console.log(`[repondeur] Extension audio : ${ext}, taille data : ${pj.data?.length || 0}`);
     transcription = await transcrire(pj.data, ext);
+    console.log(`[repondeur] Transcription OK : ${transcription.substring(0, 50)}`);
   } catch (err) {
-    console.error(`[repondeur] Erreur transcription : ${err.message}`);
+    console.error(`[repondeur] Erreur Speech-to-Text : ${err.message}`);
     transcription = `(Erreur de transcription : ${err.message})`;
   }
 
@@ -156,8 +159,16 @@ async function traiterRepondeur(msg, patientsMap, { replyEmail, applyLabelFn }) 
   const htmlBody = construireHtml(identite, telFormate, transcription);
   const textBody = construireTexte(identite, telFormate, transcription);
 
-  // Répondre à l'email d'origine
-  await replyEmail(msg.id, msg.from, `📝 Transcription : ${sujet}`, textBody, htmlBody);
+  // Envoyer la transcription à la boite du cabinet (pas de reply — OVH est no-reply)
+  const sujetEmail = `📝 Transcription : ${sujet}`;
+  console.log(`[repondeur] Envoi transcription au cabinet...`);
+  try {
+    await sendToSelf(sujetEmail, textBody, htmlBody);
+    console.log(`[repondeur] Transcription envoyée OK`);
+  } catch (err) {
+    console.error(`[repondeur] Erreur envoi : ${err.message}`);
+    throw err;
+  }
 
   console.log(`[repondeur] Transcription envoyée — ${identite || 'patient inconnu'}`);
   return { transcription, identite, numero };

@@ -64,12 +64,37 @@ async function loadPatients(auth) {
   return map;
 }
 
-// ── LOOKUP PATIENT PAR EMAIL ──────────────────────────────────
-async function findPatient(emailAddress, auth) {
+// ── LOOKUP PATIENT PAR EMAIL ou NOM ──────────────────────────
+// from : champ From complet ex: "Florent Belle <flobel2222@yahoo.fr>"
+// emailAddress : email extrait
+async function findPatient(emailAddress, auth, fromFull = '') {
   try {
     const map = await loadPatients(auth);
+
+    // 1. Lookup exact par email (cas nominal)
     const key = emailAddress.toLowerCase().trim();
-    return map.get(key) || null;
+    if (map.has(key)) return map.get(key);
+
+    // 2. Fallback par nom d'affichage extrait du champ From
+    // "Florent Belle <...>" → ["florent", "belle"]
+    const displayName = fromFull.replace(/<.*>/, '').trim().toLowerCase();
+    if (!displayName) return null;
+
+    const parts = displayName.split(/\s+/);
+    if (parts.length < 2) return null;
+
+    for (const patient of map.values()) {
+      const fn = patient.first_name.toLowerCase();
+      const ln = patient.last_name.toLowerCase();
+      // Match si les deux tokens apparaissent dans le nom (ordre quelconque)
+      const match = parts.every(p => fn.includes(p) || ln.includes(p));
+      if (match) {
+        console.log(`[sheets] Match par nom : ${patient.first_name} ${patient.last_name}`);
+        return patient;
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error('[sheets] Erreur lookup patient:', err.message);
     return null;

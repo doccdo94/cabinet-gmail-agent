@@ -159,7 +159,7 @@ async function processEmail(msg) {
       // Chercher le patient dans l'index Doctolib
       const emailAddr = extractEmail(msg.from);
       const auth      = getOAuth2Client();
-      const patient   = await findPatient(emailAddr, auth);
+      const patient   = await findPatient(emailAddr, auth, msg.from);
 
       if (patient) {
         console.log(`[sheets] Patient trouvé : ${patient.first_name} ${patient.last_name}`);
@@ -208,10 +208,21 @@ setInterval(async () => {
 }, 6 * 24 * 60 * 60 * 1000);
 
 // ── DÉMARRAGE ─────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
   console.log(`  v3.1 — Claude Sonnet + Haiku + Sheets + À traiter`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
+
+  // Démarrage automatique du watch Gmail à chaque lancement
+  try {
+    const result  = await renewWatch();
+    lastHistoryId = result.historyId;
+    const expiration = new Date(parseInt(result.expiration)).toLocaleString('fr-FR');
+    console.log(`[watch] Démarré automatiquement — expire le ${expiration}`);
+  } catch (err) {
+    console.error('[watch] Échec démarrage automatique:', err.message);
+    console.error('[watch] Appelle manuellement /watch/start si nécessaire');
+  }
 });

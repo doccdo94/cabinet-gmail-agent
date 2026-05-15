@@ -104,7 +104,15 @@ app.post('/webhook/gmail', async (req, res) => {
       return;
     }
 
-    const messages = await getNewMessages(lastHistoryId);
+    let messages = [];
+    try {
+      messages = await getNewMessages(lastHistoryId);
+    } catch (histErr) {
+      console.warn(`[webhook] historyId périmé (${lastHistoryId}), réinitialisation...`);
+      lastHistoryId = historyId;
+      await renewWatch();
+      return;
+    }
     lastHistoryId  = historyId;
 
     if (messages.length === 0) {

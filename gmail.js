@@ -334,6 +334,39 @@ async function getUnreadFactures() {
   return details;
 }
 
+// ── RÉPONDRE DANS UN THREAD (même à un no-reply) ────────────
+// Envoie un email dans le thread existant, adressé à soi-même
+async function replyInThread(threadId, subject, textBody, htmlBody) {
+  const to       = process.env.GMAIL_ADDRESS;
+  const boundary = 'boundary_cabinet_24';
+  const raw = [
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    textBody,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    htmlBody || textBody,
+    '',
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw:      Buffer.from(raw).toString('base64url'),
+      threadId, // injecté dans le fil OVH
+    },
+  });
+}
+
 // ── ENVOI EMAIL D'ALERTE ──────────────────────────────────────
 async function sendAlertEmail(subject, body) {
   const to  = process.env.GMAIL_ADDRESS;
@@ -357,4 +390,5 @@ module.exports = {
   getUnreadFactures,
   sendAlertEmail,
   replyEmail,
+  replyInThread,
 };

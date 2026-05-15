@@ -20,6 +20,7 @@ const {
   getUnreadFactures,
   sendAlertEmail,
   replyEmail,
+  replyInThread,
 } = require('./gmail');
 const { preFilter }                  = require('./prefilter');
 const { classifyEmail, genererBrouillon } = require('./claude');
@@ -160,7 +161,7 @@ async function processEmail(msg) {
           try { patientsMap = await getPatientMap(authR); } 
           catch (sheetsErr) { console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`); }
           const result      = await traiterRepondeur(msg, patientsMap, {
-            sendToSelf:   (sujet, text, html) => sendAlertEmail(sujet, text, html),
+            replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
             applyLabelFn: (id, label) => applyLabel(id, label),
           });
           if (result) {

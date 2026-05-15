@@ -109,7 +109,7 @@ function identifierAppelant(numero, patientsMap) {
 // msg         : email complet (avec .attachments depuis Gmail API)
 // patientsMap : Map email→patient depuis sheets.js
 // gmail       : fonctions gmail.js (createDraft, replyEmail)
-async function traiterRepondeur(msg, patientsMap, { sendToSelf, applyLabelFn }) {
+async function traiterRepondeur(msg, patientsMap, { replyInThread, applyLabelFn }) {
   const sujet  = msg.subject || '';
   const numero = extraireNumero(sujet);
 
@@ -159,14 +159,15 @@ async function traiterRepondeur(msg, patientsMap, { sendToSelf, applyLabelFn }) 
   const htmlBody = construireHtml(identite, telFormate, transcription);
   const textBody = construireTexte(identite, telFormate, transcription);
 
-  // Envoyer la transcription à la boite du cabinet (pas de reply — OVH est no-reply)
+  // Répondre dans le fil OVH (threadId du message original)
   const sujetEmail = `📝 Transcription : ${sujet}`;
-  console.log(`[repondeur] Envoi transcription au cabinet...`);
+  console.log(`[repondeur] Envoi transcription dans le fil...`);
   try {
-    await sendToSelf(sujetEmail, textBody, htmlBody);
+    await replyInThread(msg.threadId, sujetEmail, textBody, htmlBody);
     console.log(`[repondeur] Transcription envoyée OK`);
   } catch (err) {
-    console.error(`[repondeur] Erreur envoi : ${err.message}`);
+    console.error(`[repondeur] Erreur envoi dans fil : ${err.message}`);
+    // Fallback : email séparé si le thread échoue
     throw err;
   }
 

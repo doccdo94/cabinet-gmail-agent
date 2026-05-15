@@ -83,7 +83,9 @@ function preFilter(msg) {
   const sujet = (msg.subject || '').toLowerCase();
 
   // 1. Adresse interne → ignorer complètement
-  if (INTERNE.some(a => fromContains(email, a))) {
+  // On vérifie l'email extrait (pas le nom d'affichage) pour éviter les faux positifs
+  const estInterne = INTERNE.some(a => email.includes(a.toLowerCase()));
+  if (estInterne) {
     return {
       labels:    ["Interne"],
       skipAI:    true,
@@ -104,7 +106,19 @@ function preFilter(msg) {
     };
   }
 
-  // 3. Correspondant clinique connu
+  // 3. Panoramique — détecté par sujet avant la classification correspondant
+  const sujetLower = (msg.subject || '').toLowerCase();
+  const estPanora = sujetLower.includes('panoramique') || sujetLower.includes('pano ');
+  if (estPanora) {
+    return {
+      labels:    ["Panoramiques", "Correspondants", "À traiter"],
+      skipAI:    true,
+      categorie: "panoramique",
+      raison:    "Panoramique dentaire"
+    };
+  }
+
+  // 4. Correspondant clinique connu
   if (CORRESPONDANTS.some(a => fromContains(email, a))) {
     return {
       labels:    ["Correspondants", "À traiter"],
@@ -114,7 +128,7 @@ function preFilter(msg) {
     };
   }
 
-  // 4. Labo → tri intelligent par sujet
+  // 5. Labo → tri intelligent par sujet
   if (LABOS.some(a => fromContains(email, a))) {
     const estFacture  = SUJETS_FACTURE.some(k => sujet.includes(k));
     const estClinique = SUJETS_CLINIQUE.some(k => sujet.includes(k));
@@ -134,7 +148,7 @@ function preFilter(msg) {
     };
   }
 
-  // 5. Fournisseurs connus (Doctolib, UPS, Henry Schein, etc.)
+  // 6. Fournisseurs connus (Doctolib, UPS, Henry Schein, etc.)
   for (const f of FOURNISSEURS) {
     if (f.patterns.some(p => fromContains(from, p))) {
       return {

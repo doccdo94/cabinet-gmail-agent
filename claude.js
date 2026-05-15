@@ -7,8 +7,8 @@ const CABINET  = 'Cabinet 24 Silvestri';
 const DOCTEUR  = 'Dr Comy';
 const TEL      = '01 43 28 29 23';
 
-const MODEL_SONNET = 'claude-sonnet-4-20250514'; // classification
-const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'; // brouillons
+const MODEL_SONNET = 'claude-sonnet-4-6'; // classification (migré depuis claude-sonnet-4-20250514)
+const MODEL_HAIKU  = 'claude-haiku-4-5-20251001'; // brouillons (Haiku 4.5 toujours actif)
 
 // ── APPEL API ANTHROPIC ───────────────────────────────────────
 async function callAnthropic(model, prompt, maxTokens = 600) {

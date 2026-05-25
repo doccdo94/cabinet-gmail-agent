@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gmail Agent — Cabinet 24 Silvestri</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2336;--border:#2a3050;
+  --accent:#4f7cff;--accent2:#00d4aa;--danger:#ff4f6a;--warn:#e8a020;
+  --ok:#22c55e;--text:#e8eaf6;--text2:#8892b0;--text3:#4a5578;
+  --purple:#a78bfa;--font:'DM Mono',monospace;--font-head:'Syne',sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;min-height:100vh}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px}
+.topbar-title{font-family:var(--font-head);font-size:15px;font-weight:700}
+.pill{padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700}
+.pill-ok{background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.3)}
+.pill-err{background:rgba(255,79,106,.15);color:var(--danger);border:1px solid rgba(255,79,106,.3)}
+.pill-warn{background:rgba(232,160,32,.15);color:var(--warn);border:1px solid rgba(232,160,32,.3)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.refresh-btn{background:transparent;border:1px solid var(--border);color:var(--text2);padding:5px 12px;border-radius:6px;cursor:pointer;font-family:var(--font);font-size:12px}
+.refresh-btn:hover{background:var(--surface2)}
+.layout{display:flex;height:calc(100vh - 53px)}
+.sidenav{width:190px;background:var(--surface);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;cursor:pointer;color:var(--text2);font-size:12px;font-family:var(--font-head);font-weight:600;letter-spacing:.3px;border-left:3px solid transparent;transition:all .15s}
+.nav-item:hover{color:var(--text);background:var(--surface2)}
+.nav-item.active{color:var(--text);background:var(--surface2);border-left-color:var(--accent)}
+.nav-sep{height:1px;background:var(--border);margin:8px 18px}
+.nav-label{padding:4px 18px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:var(--font-head)}
+.main{flex:1;padding:24px;overflow-y:auto}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.metric-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-family:var(--font-head)}
+.metric-value{font-size:22px;font-weight:500;line-height:1}
+.metric-sub{font-size:11px;color:var(--text2);margin-top:4px}
+.val-ok{color:var(--ok)}.val-err{color:var(--danger)}.val-warn{color:var(--warn)}.val-info{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.card-title{font-family:var(--font-head);font-weight:700;font-size:12px}
+.card-body{padding:0}
+.row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px}
+.row:last-child{border-bottom:none}
+.row:hover{background:var(--surface2)}
+.row-label{color:var(--text2);min-width:110px;font-size:11px}
+.row-val{flex:1;font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:500;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#3d6aee}
+.btn-ok{background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.25)}.btn-ok:hover{background:rgba(34,197,94,.25)}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:3px 7px}.btn-danger:hover{background:rgba(255,79,106,.1);border-color:var(--danger)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn-ghost:hover{color:var(--text)}
+.btn-export{background:var(--accent2);color:#0a1a14;font-weight:700}.btn-export:hover{background:#00bc96}
+input,select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;transition:border .15s}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--text3)}
+.add-row{display:flex;gap:6px;padding:10px 14px;background:var(--surface2);border-top:1px solid var(--border)}
+.email-addr{font-size:11px;color:var(--accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);margin:2px;gap:4px;cursor:pointer}
+.chip:hover{border-color:var(--danger);color:var(--danger)}
+.badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.log-row{display:flex;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--font)}
+.log-row:last-child{border-bottom:none}
+.log-time{color:var(--text3);min-width:48px}
+.log-ctx{color:var(--accent);min-width:80px}
+.log-msg{color:var(--text2);flex:1}
+.alert-bar{background:rgba(255,79,106,.1);border:1px solid rgba(255,79,106,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--danger)}
+.note{background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn);line-height:1.6}
+.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.quick-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;text-decoration:none;display:block}
+.quick-card:hover{background:var(--surface2);border-color:var(--accent)}
+.quick-icon{font-size:22px;margin-bottom:6px;display:block}
+.quick-label{font-family:var(--font-head);font-size:12px;font-weight:600;color:var(--text2)}
+.section-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;font-family:var(--font-head)}
+.fournisseur-block{border-bottom:1px solid var(--border);padding:10px 14px}
+.fournisseur-block:last-of-type{border-bottom:none}
+.rep-result{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;font-size:12px;min-height:60px;color:var(--text2);line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">Gmail Agent</div>
+  <span style="color:var(--text2);font-size:12px">Cabinet 24 Silvestri</span>
+  <span class="pill" id="status-pill" style="margin-left:4px">Connexion...</span>
+  <div class="topbar-right">
+    <span style="font-size:11px;color:var(--text3)" id="refresh-time">—</span>
+    <button class="refresh-btn" onclick="refresh()">↺ Actualiser</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidenav">
+    <span class="nav-label">Monitoring</span>
+    <div class="nav-item active" onclick="showTab('monitoring',this)">📊 Tableau de bord</div>
+    <div class="nav-sep"></div>
+    <span class="nav-label">Règles de tri</span>
+    <div class="nav-item" onclick="showTab('correspondants',this)">👨‍⚕️ Correspondants</div>
+    <div class="nav-item" onclick="showTab('labos',this)">🧪 Labos</div>
+    <div class="nav-item" onclick="showTab('interne',this)">🏠 Interne</div>
+    <div class="nav-item" onclick="showTab('fournisseurs',this)">📦 Fournisseurs</div>
+    <div class="nav-sep"></div>
+    <span class="nav-label">Outils</span>
+    <div class="nav-item" onclick="showTab('repondeur',this)">🎙️ Répondeur</div>
+    <div class="nav-item" onclick="showTab('config',this)">⚙️ Configuration</div>
+  </nav>
+
+  <main class="main" id="main-content">
+    <!-- contenu injecté par JS -->
+  </main>
+</div>
+
+<script>
+const BASE = '';  // même origine — servi par Render
+let CFG = { correspondants:[], labos:[], interne:[], fournisseurs:[] };
+let currentTab = 'monitoring';
+
+const TABS = {
+  monitoring: renderMonitoring,
+  correspondants: () => renderEmailList('correspondants','👨‍⚕️ Correspondants cliniques','Confrères et spécialistes — label Correspondants appliqué automatiquement','new-corr'),
+  labos: () => renderEmailList('labos','🧪 Labos','Tri intelligent : facture ou clinique selon le sujet','new-labo'),
+  interne: () => renderEmailList('interne','🏠 Adresses internes','Ces adresses sont ignorées par le système IA','new-int'),
+  fournisseurs: renderFournisseurs,
+  repondeur: renderRepondeur,
+  config: renderConfig,
+};
+
+function showTab(name, el) {
+  currentTab = name;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if(el) el.classList.add('active');
+  render();
+}
+
+function render() { TABS[currentTab]?.(); }
+
+// ── MONITORING ────────────────────────────────────────────────
+function renderMonitoring() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="grid4" id="metrics-grid">
+      <div class="metric"><div class="metric-label">Token OAuth2</div><div class="metric-value val-ok" id="m-token">—</div><div class="metric-sub">Gmail</div></div>
+      <div class="metric"><div class="metric-label">Emails traités</div><div class="metric-value" id="m-total">—</div><div class="metric-sub" id="m-pf">—</div></div>
+      <div class="metric"><div class="metric-label">Brouillons IA</div><div class="metric-value val-ok" id="m-br">—</div><div class="metric-sub" id="m-urg">urgences: 0</div></div>
+      <div class="metric"><div class="metric-label">Erreurs</div><div class="metric-value" id="m-err">—</div><div class="metric-sub" id="m-up">uptime: —</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Dernier email traité</span><span class="badge" id="m-cat" style="background:var(--surface);border:1px solid var(--border);color:var(--text2)">—</span></div>
+      <div class="card-body">
+        <div class="row"><span class="row-label">De</span><span class="row-val" id="m-from">—</span></div>
+        <div class="row"><span class="row-label">Sujet</span><span class="row-val" id="m-subj">—</span></div>
+        <div class="row"><span class="row-label">Traité le</span><span class="row-val" id="m-time">—</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Dernières erreurs</span></div>
+      <div id="m-errors" class="card-body"><div class="log-row"><span class="log-msg" style="color:var(--text3)">Chargement...</span></div></div>
+    </div>`;
+  fetchStats();
+}
+
+async function fetchStats() {
+  try {
+    const r = await fetch(BASE+'/health');
+    const d = await r.json();
+    el('m-token').textContent = 'Valide';
+    el('m-token').className = 'metric-value val-ok';
+    el('m-total').textContent = d.stats?.total ?? '—';
+    el('m-pf').textContent = 'filtrés: '+(d.stats?.prefiltre??0)+' · claude: '+(d.stats?.claude??0);
+    el('m-br').textContent = d.stats?.brouillons ?? '—';
+    el('m-urg').textContent = 'urgences: '+(d.stats?.urgences??0);
+    const errs = d.stats?.errors ?? 0;
+    el('m-err').textContent = errs;
+    el('m-err').className = 'metric-value '+(errs>0?'val-err':'val-ok');
+    el('m-up').textContent = 'uptime: '+(d.uptime??'—');
+    setStatus('ok');
+    fetchErrors();
+  } catch(e) { setStatus('err'); }
+}
+
+async function fetchErrors() {
+  try {
+    const r = await fetch(BASE+'/monitoring');
+    const html = await r.text();
+    const doc = new DOMParser().parseFromString(html,'text/html');
+    const from = doc.querySelector('#last-email-from');
+    const subj = doc.querySelector('#last-email-subject');
+    const time = doc.querySelector('#last-email-time');
+    const cat  = doc.querySelector('#last-email-cat');
+    const errs = doc.querySelector('#errors-list');
+    if(from) el('m-from').textContent = from.textContent||'—';
+    if(subj) el('m-subj').textContent = subj.textContent||'—';
+    if(time) el('m-time').textContent = time.textContent||'—';
+    if(cat)  el('m-cat').textContent  = cat.textContent||'—';
+    if(errs) el('m-errors').innerHTML = errs.innerHTML;
+  } catch(e) {}
+}
+
+// ── LISTES EMAIL ──────────────────────────────────────────────
+function renderEmailList(listName, title, desc, inputId) {
+  const items = CFG[listName] || [];
+  document.getElementById('main-content').innerHTML = `
+    <div class="note">${desc}</div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">${title}</span><span style="color:var(--text2);font-size:11px">${items.length} adresse(s)</span></div>
+      <div class="card-body">
+        ${items.length ? items.map((addr,i) => `
+          <div class="row">
+            <span class="email-addr">${addr}</span>
+            <button class="btn btn-danger" onclick="removeItem('${listName}',${i})">✕</button>
+          </div>`).join('') : '<div class="row"><span style="color:var(--text3)">Aucune adresse</span></div>'}
+      </div>
+      <div class="add-row">
+        <input type="text" id="${inputId}" placeholder="nouvelle@adresse.fr" style="flex:1" onkeydown="if(event.key==='Enter')addItem('${listName}','${inputId}')">
+        <button class="btn btn-primary" onclick="addItem('${listName}','${inputId}')">+ Ajouter</button>
+      </div>
+    </div>
+    <button class="btn btn-export" onclick="exporterConfig()" style="width:100%;justify-content:center">⬇ Exporter prefilter.js</button>`;
+}
+
+// ── FOURNISSEURS ──────────────────────────────────────────────
+function renderFournisseurs() {
+  const items = CFG.fournisseurs || [];
+  let html = `<div class="note">Emails détectés par l'adresse expéditeur (fragment from:). Modifier ici puis exporter.</div>
+  <div class="card"><div class="card-header"><span class="card-title">📦 Fournisseurs</span></div><div class="card-body">`;
+
+  items.forEach((f,i) => {
+    html += `<div class="fournisseur-block">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--font-head);font-weight:700;font-size:13px">Label : <span style="color:var(--accent)">${f.label}</span></span>
+        <button class="btn btn-danger" onclick="removeItem('fournisseurs',${i})">Supprimer</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;margin-bottom:6px">
+        ${f.patterns.map((p,j) => `<span class="chip" onclick="removePattern(${i},${j})" title="Cliquer pour supprimer">${p} ×</span>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="kw-${i}" placeholder="+ mot-clé from:" style="flex:1;font-size:11px" onkeydown="if(event.key==='Enter')addPattern(${i},'kw-${i}')">
+        <button class="btn btn-ghost" onclick="addPattern(${i},'kw-${i}')">+</button>
+      </div>
+    </div>`;
+  });
+
+  html += `</div>
+    <div class="add-row" style="flex-wrap:wrap;gap:6px">
+      <input type="text" id="new-f-label" placeholder="Nouveau label (ex: CPAM)" style="width:160px">
+      <input type="text" id="new-f-kw" placeholder="mot-clé from:" style="flex:1" onkeydown="if(event.key==='Enter')addFournisseur()">
+      <button class="btn btn-primary" onclick="addFournisseur()">+ Ajouter</button>
+    </div>
+  </div>
+  <button class="btn btn-export" onclick="exporterConfig()" style="width:100%;justify-content:center">⬇ Exporter prefilter.js</button>`;
+
+  document.getElementById('main-content').innerHTML = html;
+}
+
+// ── RÉPONDEUR ─────────────────────────────────────────────────
+function renderRepondeur() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="card">
+      <div class="card-header"><span class="card-title">🎙️ Tester une transcription</span><span class="badge" style="background:rgba(79,124,255,.15);color:var(--accent);border:1px solid rgba(79,124,255,.3)">Speech-to-Text</span></div>
+      <div class="card-body" style="padding:14px">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="tel-input" placeholder="Numéro de téléphone — ex: 0647832898" style="flex:1">
+          <button class="btn btn-primary" onclick="testerRepondeur()">▶ Transcrire</button>
+        </div>
+        <div class="rep-result" id="rep-result">Entrez un numéro pour forcer la transcription d'un message vocal existant dans Gmail.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Fonctionnement</span></div>
+      <div class="card-body">
+        <div class="row"><span class="row-label">Détection</span><span class="row-val">ovhcloud / répondeur dans l'expéditeur</span></div>
+        <div class="row"><span class="row-label">Labels</span><span class="row-val">Répondeur à traiter + À traiter</span></div>
+        <div class="row"><span class="row-label">Transcription</span><span class="row-val">Google Speech-to-Text v1 · fr-FR · phone_call</span></div>
+        <div class="row"><span class="row-label">Résultat</span><span class="row-val">Réponse dans le fil OVH (pas de no-reply)</span></div>
+        <div class="row"><span class="row-label">Identification</span><span class="row-val">Index Doctolib — numéro → patient</span></div>
+      </div>
+    </div>`;
+}
+
+// ── CONFIG ────────────────────────────────────────────────────
+function renderConfig() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="quick-grid">
+      <a class="quick-card" href="/auth/gmail"><span class="quick-icon">🔑</span><span class="quick-label">Renouveler token</span></a>
+      <a class="quick-card" href="/watch/start" target="_blank"><span class="quick-icon">📡</span><span class="quick-label">Démarrer watch</span></a>
+      <a class="quick-card" href="/alertes/factures" target="_blank"><span class="quick-icon">🧾</span><span class="quick-label">Alerte factures</span></a>
+      <a class="quick-card" href="https://dashboard.render.com" target="_blank"><span class="quick-icon">🖥️</span><span class="quick-label">Render</span></a>
+      <a class="quick-card" href="https://console.cloud.google.com" target="_blank"><span class="quick-icon">☁️</span><span class="quick-label">Google Cloud</span></a>
+      <a class="quick-card" href="https://github.com/doccdo94/cabinet-gmail-agent" target="_blank"><span class="quick-icon">🐙</span><span class="quick-label">GitHub</span></a>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Modèles & services</span></div>
+      <div class="card-body">
+        <div class="row"><span class="row-label">Classification</span><span class="row-val" style="color:var(--accent)">claude-sonnet-4-6</span></div>
+        <div class="row"><span class="row-label">Brouillons</span><span class="row-val" style="color:var(--accent)">claude-haiku-4-5-20251001</span></div>
+        <div class="row"><span class="row-label">Transcription</span><span class="row-val">Google Speech-to-Text v1 · fr-FR</span></div>
+        <div class="row"><span class="row-label">Index patients</span><span class="row-val">Google Sheets 14R8X1jaIQ4F...</span></div>
+        <div class="row"><span class="row-label">Keep-alive</span><span class="row-val">cron-job.org · */5 7-21 * * *</span></div>
+        <div class="row"><span class="row-label">Alerte factures</span><span class="row-val">cron-job.org · 0 8 * * 1</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Procédure token expiré</span></div>
+      <div class="card-body" style="padding:14px;line-height:1.8;font-size:12px;color:var(--text2)">
+        1. Cliquer <strong style="color:var(--text)">Renouveler token</strong> ci-dessus<br>
+        2. Connexion avec 24silvestri@gmail.com<br>
+        3. Copier le refresh_token affiché<br>
+        4. Render → Environment → GMAIL_REFRESH_TOKEN → coller → Save<br>
+        5. Render redémarre automatiquement en 30 secondes
+      </div>
+    </div>`;
+}
+
+// ── API ACTIONS ───────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const r = await fetch(BASE+'/api/config');
+    if(r.ok) CFG = await r.json();
+  } catch(e) {}
+}
+
+async function apiPost(body) {
+  try {
+    const r = await fetch(BASE+'/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    if(d.ok) CFG = d.data;
+  } catch(e) {}
+  render();
+}
+
+function addItem(list, inputId) {
+  const val = document.getElementById(inputId)?.value.trim();
+  if(!val) return;
+  document.getElementById(inputId).value = '';
+  apiPost({ list, action:'add', value:val });
+}
+
+function removeItem(list, index) {
+  apiPost({ list, action:'remove', index });
+}
+
+function addPattern(fi, inputId) {
+  const val = document.getElementById(inputId)?.value.trim();
+  if(!val) return;
+  document.getElementById(inputId).value = '';
+  apiPost({ list:'fournisseurs', action:'add-pattern', index:fi, value:val });
+}
+
+function removePattern(fi, pi) {
+  apiPost({ list:'fournisseurs', action:'remove-pattern', index:fi, patterns:pi });
+}
+
+function addFournisseur() {
+  const label = document.getElementById('new-f-label')?.value.trim();
+  const kw    = document.getElementById('new-f-kw')?.value.trim();
+  if(!label||!kw) return;
+  apiPost({ list:'fournisseurs', action:'add', label, patterns:[kw.toLowerCase()] });
+}
+
+async function exporterConfig() {
+  try {
+    const r = await fetch(BASE+'/api/export');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download='prefilter.js'; a.click();
+    alert('prefilter.js téléchargé — pusher sur GitHub pour rendre permanent après redémarrage.');
+  } catch(e) { alert('Erreur export : '+e.message); }
+}
+
+async function testerRepondeur() {
+  const num = document.getElementById('tel-input')?.value.trim();
+  if(!num) return;
+  const el = document.getElementById('rep-result');
+  el.textContent = 'Transcription en cours...';
+  el.style.color = 'var(--text2)';
+  try {
+    const r = await fetch(BASE+'/test/repondeur?numero='+encodeURIComponent(num));
+    const d = await r.json();
+    if(d.ok) {
+      el.innerHTML = '<strong style="color:var(--ok)">'+(d.identite||'Patient inconnu')+'</strong><br><span style="color:var(--text)">'+(d.transcription||'')+'</span>';
+    } else {
+      el.textContent = d.error||d.message||'Aucun message trouvé';
+      el.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    el.textContent = 'Erreur : '+e.message;
+    el.style.color = 'var(--danger)';
+  }
+}
+
+function setStatus(state) {
+  const pill = document.getElementById('status-pill');
+  if(state==='ok')  { pill.textContent='Actif'; pill.className='pill pill-ok'; }
+  if(state==='err') { pill.textContent='Hors ligne'; pill.className='pill pill-err'; }
+  document.getElementById('refresh-time').textContent = 'Actualisé à '+new Date().toLocaleTimeString('fr-FR');
+}
+
+async function refresh() {
+  await loadConfig();
+  render();
+  if(currentTab==='monitoring') fetchStats();
+}
+
+function el(id) { return document.getElementById(id); }
+
+// ── INIT ──────────────────────────────────────────────────────
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

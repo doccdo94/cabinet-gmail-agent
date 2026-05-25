@@ -506,6 +506,12 @@ ${!tokenOk ? `
   res.send(html);
 });
 
+// ── DASHBOARD HTML ───────────────────────────────────────────
+const path = require('path');
+app.get('/dashboard', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
 // ── API CONFIG — gestion des listes de tri ───────────────────
 const { getConfig, updateConfig, exportConfig } = require('./prefilter');
 

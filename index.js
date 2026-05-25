@@ -506,6 +506,26 @@ ${!tokenOk ? `
   res.send(html);
 });
 
+// ── API CONFIG — gestion des listes de tri ───────────────────
+const { getConfig, updateConfig, exportConfig } = require('./prefilter');
+
+app.get('/api/config', (_req, res) => res.json(getConfig()));
+
+app.post('/api/config', (req, res) => {
+  try {
+    const result = updateConfig(req.body);
+    res.json({ ok: true, data: result });
+  } catch(e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/export', (_req, res) => {
+  res.setHeader('Content-Type', 'text/javascript');
+  res.setHeader('Content-Disposition', 'attachment; filename="prefilter.js"');
+  res.send(exportConfig());
+});
+
 // ── ALERTE TOKEN EXPIRÉ ──────────────────────────────────────
 let _alerteEnvoyee = false; // évite le spam d'alertes
 async function alerteTokenExpire() {

@@ -164,4 +164,78 @@ function preFilter(msg) {
   return null;
 }
 
-module.exports = { preFilter };
+// ── CONFIG MUTABLE (modifiable via API) ──────────────────────
+// Copies mutables des listes pour l'API de gestion
+let _correspondants = [...CORRESPONDANTS];
+let _labos          = [...LABOS];
+let _interne        = [...INTERNE];
+let _fournisseurs   = FOURNISSEURS.map(f => ({ ...f, patterns: [...f.patterns] }));
+
+// Expose les listes pour l'API
+const CORRESPONDANTS_LIST = _correspondants;
+const LABOS_LIST          = _labos;
+const INTERNE_LIST        = _interne;
+const FOURNISSEURS_LIST   = _fournisseurs;
+
+function getConfig() {
+  return {
+    correspondants: _correspondants,
+    labos:          _labos,
+    interne:        _interne,
+    fournisseurs:   _fournisseurs,
+  };
+}
+
+function updateConfig({ list, action, value, index, label, patterns }) {
+  if (list === 'correspondants') {
+    if (action === 'add' && value)    _correspondants.push(value.toLowerCase().trim());
+    if (action === 'remove' && index !== undefined) _correspondants.splice(index, 1);
+  } else if (list === 'labos') {
+    if (action === 'add' && value)    _labos.push(value.toLowerCase().trim());
+    if (action === 'remove' && index !== undefined) _labos.splice(index, 1);
+  } else if (list === 'interne') {
+    if (action === 'add' && value)    _interne.push(value.toLowerCase().trim());
+    if (action === 'remove' && index !== undefined) _interne.splice(index, 1);
+  } else if (list === 'fournisseurs') {
+    if (action === 'add' && label && patterns) _fournisseurs.push({ label, patterns });
+    if (action === 'remove' && index !== undefined) _fournisseurs.splice(index, 1);
+    if (action === 'add-pattern' && index !== undefined && value)
+      _fournisseurs[index].patterns.push(value.toLowerCase().trim());
+    if (action === 'remove-pattern' && index !== undefined && patterns !== undefined)
+      _fournisseurs[index].patterns.splice(patterns, 1);
+  } else {
+    throw new Error('Liste inconnue : ' + list);
+  }
+  return getConfig();
+}
+
+function exportConfig() {
+  const arr = a => a.map(s => `  "${s}"`).join(',\n');
+  const fournStr = _fournisseurs.map(f =>
+    `  { label: "${f.label}", patterns: [${f.patterns.map(p => `"${p}"`).join(', ')}] }`
+  ).join(',\n');
+
+  return `// prefilter.js — généré le ${new Date().toLocaleDateString('fr-FR')}
+// Cabinet 24 Silvestri — Gmail Agent
+
+const CORRESPONDANTS = [
+${arr(_correspondants)}
+];
+
+const LABOS = [
+${arr(_labos)}
+];
+
+const INTERNE = [
+${arr(_interne)}
+];
+
+const FOURNISSEURS = [
+${fournStr}
+];
+// ... (reste du fichier inchangé)
+`;
+}
+
+module.exports = { preFilter, getConfig, updateConfig, exportConfig,
+  CORRESPONDANTS_LIST, LABOS_LIST, INTERNE_LIST, FOURNISSEURS_LIST };

@@ -10,8 +10,8 @@
 
 const { google } = require('googleapis');
 
-const SHEET_ID  = '14R8X1jaIQ4FhASA8N0PJvnpkkvdiURq';
-const SHEET_TAB = 'Sheet1'; // onglet par défaut
+const SHEET_ID  = '14R8X1jaIQ4FhASA8N0PJvnpkkvdiURqj';
+const SHEET_TAB = 'export_patients-part-1'; // onglet Doctolib
 
 // ── CACHE ─────────────────────────────────────────────────────
 // Évite de requêter le Sheet à chaque email
@@ -43,8 +43,10 @@ async function loadPatients(auth) {
   const map = new Map();
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
+    if (!row || row.length === 0) continue; // ligne vide
     const email = (row[idx('email')] || '').toLowerCase().trim();
-    if (!email) continue;
+    const phone = (row[idx('phone_number')] || '').trim();
+    if (!email && !phone) continue; // ignorer lignes sans email ni téléphone
 
     map.set(email, {
       id:          row[idx('id')]         || '',

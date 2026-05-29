@@ -72,6 +72,8 @@ function normaliserNumero(raw) {
   if (tel.startsWith('+33'))  tel = '0' + tel.substring(3);
   if (tel.startsWith('0033')) tel = '0' + tel.substring(4);
   tel = tel.replace(/\D/g, '');
+  // Cas OVH : 33XXXXXXXXX sans le + (11 chiffres commençant par 33)
+  if (tel.length === 11 && tel.startsWith('33')) tel = '0' + tel.substring(2);
   return (tel.length === 10 && tel.startsWith('0')) ? tel : null;
 }
 

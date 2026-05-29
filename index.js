@@ -159,8 +159,12 @@ async function processEmail(msg) {
         try {
           const authR       = getOAuth2Client();
           let patientsMap   = null;
-          try { patientsMap = await getPatientMap(authR); } 
-          catch (sheetsErr) { console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`); }
+          try {
+            patientsMap = await getPatientMap(authR);
+            console.log(`[repondeur] Index patients : ${patientsMap ? patientsMap.size + ' entrées' : 'null'}`);
+          } catch (sheetsErr) {
+            console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`);
+          }
           const result      = await traiterRepondeur(msg, patientsMap, {
             replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
             applyLabelFn: (id, label) => applyLabel(id, label),

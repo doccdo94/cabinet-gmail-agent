@@ -24,7 +24,7 @@ const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 function getAuthUrl() {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    prompt: 'consent', // force le refresh_token même si déjà accordé
+    prompt: 'select_account', // ne force pas un nouveau token si déjà valide
     scope: [
       'https://www.googleapis.com/auth/gmail.modify',     // lire + écrire labels + brouillons
       'https://www.googleapis.com/auth/spreadsheets.readonly', // index patients Doctolib (S4)

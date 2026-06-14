@@ -7,6 +7,18 @@
 
 require('dotenv').config();
 const express = require('express');
+
+// ── GESTIONNAIRE D'EXCEPTIONS GLOBAL ─────────────────────────
+// Empêche les crashs sur les erreurs non gérées
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH] Exception non gérée :', err.message);
+  console.error(err.stack);
+  // On ne quitte pas — on continue
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRASH] Promise rejetée non gérée :', reason?.message || reason);
+});
 const {
   getAuthUrl,
   handleCallback,

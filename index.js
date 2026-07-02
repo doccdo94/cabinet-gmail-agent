@@ -235,7 +235,7 @@ async function rattrapageRepondeur() {
     const apres = Math.floor((Date.now() - 3 * 60 * 60 * 1000) / 1000);
     const res = await gmail.users.messages.list({
       userId:     'me',
-      q:          `from:repondeur after:${apres}`,
+      q:          `subject:vocal after:${apres}`,
       maxResults: 10,
     });
 
@@ -440,7 +440,7 @@ app.get('/api/scan-repondeur', async (req, res) => {
     const apres = Math.floor((Date.now() - heures * 60 * 60 * 1000) / 1000);
     const liste = await gmail.users.messages.list({
       userId:     'me',
-      q:          `from:repondeur after:${apres}`,
+      q:          `subject:vocal after:${apres}`,
       maxResults: 20,
     });
 

@@ -1,24 +1,12 @@
 // ============================================================
 // index.js — Serveur Express principal
-// Cabinet 24 Silvestri — Gmail Agent v3.1
-// Nouveauté : Claude Sonnet classification + Haiku brouillons
-//             + index patients Doctolib (Google Sheets)
+// Cabinet 24 Silvestri — Gmail Agent v3.3
+// Nouveauté v3.3 : rattrapage répondeur au démarrage
+//                  (couvre les gaps lors des redémarrages Render)
 // ============================================================
 
 require('dotenv').config();
 const express = require('express');
-
-// ── GESTIONNAIRE D'EXCEPTIONS GLOBAL ─────────────────────────
-// Empêche les crashs sur les erreurs non gérées
-process.on('uncaughtException', (err) => {
-  console.error('[CRASH] Exception non gérée :', err.message);
-  console.error(err.stack);
-  // On ne quitte pas — on continue
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('[CRASH] Promise rejetée non gérée :', reason?.message || reason);
-});
 const {
   getAuthUrl,
   handleCallback,
@@ -56,8 +44,8 @@ const stats = {
 app.get('/health', (_req, res) => {
   res.json({
     status:    'ok',
-    service:   'gmail-agent-cabinet-v3.2',
-    version:   '3.2.0',
+    service:   'gmail-agent-cabinet-v3.3',
+    version:   '3.3.0',
     lastHistoryId,
     uptime:    Math.floor(process.uptime()) + 's',
     timestamp: new Date().toISOString(),
@@ -153,7 +141,6 @@ async function processEmail(msg) {
   console.log('─'.repeat(60));
   console.log(`[email] De    : ${msg.from}`);
   console.log(`[email] Sujet : ${msg.subject}`);
-  monitoring.lastEmail = { from: msg.from, subject: msg.subject, categorie: '...', time: new Date().toLocaleString('fr-FR') };
 
   try {
 
@@ -171,12 +158,8 @@ async function processEmail(msg) {
         try {
           const authR       = getOAuth2Client();
           let patientsMap   = null;
-          try {
-            patientsMap = await getPatientMap(authR);
-            console.log(`[repondeur] Index patients : ${patientsMap ? patientsMap.size + ' entrées' : 'null'}`);
-          } catch (sheetsErr) {
-            console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`);
-          }
+          try { patientsMap = await getPatientMap(authR); }
+          catch (sheetsErr) { console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`); }
           const result      = await traiterRepondeur(msg, patientsMap, {
             replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
             applyLabelFn: (id, label) => applyLabel(id, label),
@@ -236,10 +219,6 @@ async function processEmail(msg) {
   } catch (err) {
     stats.errors++;
     console.error(`[email] Erreur : ${err.message}`);
-    logError('email', err.message);
-    if (err.message?.includes('invalid_grant') || err.code === 401) {
-      await alerteTokenExpire();
-    }
   }
 
   console.log('─'.repeat(60));
@@ -249,6 +228,66 @@ async function processEmail(msg) {
 function extractEmail(from) {
   const match = from.match(/<(.+?)>/);
   return (match ? match[1] : from).toLowerCase().trim();
+}
+
+// ── RATTRAPAGE RÉPONDEUR AU DÉMARRAGE ────────────────────────
+// Vérifie les messages répondeur des 3 dernières heures
+// et retranscrit ceux dont le thread ne contient pas encore
+// de réponse du cabinet (= non traités lors d'un redémarrage)
+async function rattrapageRepondeur() {
+  try {
+    const { google } = require('googleapis');
+    const auth  = getOAuth2Client();
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const apres = Math.floor((Date.now() - 3 * 60 * 60 * 1000) / 1000);
+    const res = await gmail.users.messages.list({
+      userId:     'me',
+      q:          `from:repondeur after:${apres}`,
+      maxResults: 10,
+    });
+
+    const messages = res.data.messages || [];
+    if (messages.length === 0) {
+      console.log('[rattrapage] Aucun message répondeur récent');
+      return;
+    }
+
+    console.log(`[rattrapage] ${messages.length} message(s) répondeur à vérifier`);
+
+    for (const m of messages) {
+      // Lire le thread complet pour voir s'il y a déjà une transcription
+      const thread = await gmail.users.threads.get({ userId: 'me', id: m.threadId });
+      const msgs   = thread.data.messages || [];
+
+      // Si le cabinet a déjà répondu dans ce thread → déjà transcrit
+      const dejaTraite = msgs.some(tm => {
+        const from = tm.payload.headers.find(h => h.name === 'From')?.value || '';
+        return from.includes('24silvestri@gmail.com');
+      });
+
+      if (dejaTraite) {
+        console.log(`[rattrapage] Déjà traité : thread ${m.threadId}`);
+        continue;
+      }
+
+      // Pas encore transcrit → retraiter
+      console.log(`[rattrapage] Non traité, transcription en cours : ${m.id}`);
+      const msg         = await getEmailContent(m.id);
+      const patientsMap = await getPatientMap(auth).catch(() => null);
+
+      await traiterRepondeur(msg, patientsMap, {
+        replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
+        applyLabelFn:  (id, label) => applyLabel(id, label),
+      });
+
+      // Marquer comme traité pour ne pas repasser dans processEmail si webhook arrive
+      processedMessageIds.add(m.id);
+      console.log(`[rattrapage] Transcription envoyée : ${m.id}`);
+    }
+  } catch (err) {
+    console.error('[rattrapage] Erreur:', err.message);
+  }
 }
 
 // ── RENOUVELLEMENT AUTOMATIQUE DU WATCH ──────────────────────
@@ -276,7 +315,6 @@ app.get('/test/repondeur', async (req, res) => {
     const testAuth  = getOAuth2Client();
     const gmail = google.gmail({ version: 'v1', auth: testAuth });
 
-    // Chercher le message par sujet dans Gmail
     const query = numero
       ? `subject:"Message vocal du ${numero}" in:anywhere`
       : `subject:"${sujet}" in:anywhere`;
@@ -292,20 +330,18 @@ app.get('/test/repondeur', async (req, res) => {
     const msgId = messages[0].id;
     console.log(`[test] Message trouvé : ${msgId}`);
 
-    // Lire directement via Gmail API sans passer par getEmailContent
     const { google: googleLib } = require('googleapis');
-    const directAuth = getOAuth2Client();
+    const directAuth  = getOAuth2Client();
     const gmailDirect = googleLib.gmail({ version: 'v1', auth: directAuth });
     const rawMsg = await gmailDirect.users.messages.get({
       userId: 'me',
-      id: msgId,
+      id:     msgId,
       format: 'full',
     });
 
     const headers = rawMsg.data.payload.headers;
     const getH = (n) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || '';
 
-    // Extraire les pièces jointes audio
     const attachments = [];
     async function walkParts(part) {
       if (part.filename && /\.(mp3|wav|ogg|m4a|flac)$/i.test(part.filename)) {
@@ -336,7 +372,7 @@ app.get('/test/repondeur', async (req, res) => {
       body:        '',
       attachments,
     };
-    const auth2 = getOAuth2Client();
+    const auth2       = getOAuth2Client();
     const patientsMap = await getPatientMap(auth2);
 
     const result = await traiterRepondeur(msg, patientsMap, {
@@ -346,9 +382,9 @@ app.get('/test/repondeur', async (req, res) => {
 
     if (result) {
       res.json({
-        ok:           true,
-        identite:     result.identite || 'Patient inconnu',
-        numero:       result.numero,
+        ok:            true,
+        identite:      result.identite || 'Patient inconnu',
+        numero:        result.numero,
         transcription: result.transcription,
       });
     } else {
@@ -361,8 +397,6 @@ app.get('/test/repondeur', async (req, res) => {
 });
 
 // ── ALERTE FACTURES ──────────────────────────────────────────
-// Appelé par cron-job.org chaque lundi à 8h
-// URL à configurer : GET /alertes/factures
 app.get('/alertes/factures', async (_req, res) => {
   try {
     const factures = await getUnreadFactures();
@@ -389,198 +423,15 @@ app.get('/alertes/factures', async (_req, res) => {
   }
 });
 
-// ── MONITORING STATE ─────────────────────────────────────────
-const monitoring = {
-  startTime:    Date.now(),
-  lastEmail:    null,
-  lastError:    null,
-  tokenStatus:  'ok',   // 'ok' | 'expired'
-  errors:       [],     // dernières erreurs (max 20)
-};
-
-function logError(context, message) {
-  const entry = { time: new Date().toISOString(), context, message };
-  monitoring.errors.unshift(entry);
-  if (monitoring.errors.length > 20) monitoring.errors.pop();
-  monitoring.lastError = entry;
-  if (message.includes('invalid_grant')) monitoring.tokenStatus = 'expired';
-}
-
-// ── DASHBOARD ─────────────────────────────────────────────────
-app.get('/monitoring', (_req, res) => {
-  const uptime  = Math.floor((Date.now() - monitoring.startTime) / 1000);
-  const uptimeH = `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`;
-  const tokenOk = monitoring.tokenStatus === 'ok';
-
-  const html = `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="30">
-<title>Gmail Agent — Cabinet 24 Silvestri</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,sans-serif;background:#f1f5f9;color:#1e293b;padding:20px}
-h1{font-size:18px;font-weight:700;margin-bottom:4px}
-.sub{font-size:13px;color:#64748b;margin-bottom:24px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
-.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px #0001}
-.card-label{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.card-value{font-size:22px;font-weight:700}
-.card-sub{font-size:11px;color:#94a3b8;margin-top:4px}
-.ok{color:#059669}.warn{color:#d97706}.err{color:#dc2626}
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-ok{background:#d1fae5;color:#059669}
-.badge-err{background:#fee2e2;color:#dc2626}
-.section{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px #0001;margin-bottom:12px}
-.section h2{font-size:13px;font-weight:600;margin-bottom:12px;color:#475569}
-.error-row{padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:12px}
-.error-row:last-child{border-bottom:none}
-.error-time{color:#94a3b8;margin-right:8px}
-.error-ctx{font-weight:600;margin-right:6px}
-.action{background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:500;display:inline-block}
-.refresh{font-size:11px;color:#94a3b8;text-align:right;margin-top:12px}
-</style>
-</head>
-<body>
-<h1>Gmail Agent — Cabinet 24 Silvestri</h1>
-<div class="sub">Actualisation automatique toutes les 30 secondes</div>
-
-<div class="grid">
-  <div class="card">
-    <div class="card-label">Token OAuth2</div>
-    <div class="card-value">
-      <span class="badge ${tokenOk ? 'badge-ok' : 'badge-err'}">${tokenOk ? 'Valide' : 'EXPIRÉ'}</span>
-    </div>
-    <div class="card-sub">${tokenOk ? 'Acces Gmail OK' : 'Action requise'}</div>
-  </div>
-  <div class="card">
-    <div class="card-label">Uptime</div>
-    <div class="card-value ok">${uptimeH}</div>
-    <div class="card-sub">depuis le dernier restart</div>
-  </div>
-  <div class="card">
-    <div class="card-label">Emails traites</div>
-    <div class="card-value">${stats.total}</div>
-    <div class="card-sub">prefiltres: ${stats.prefiltre} | claude: ${stats.claude}</div>
-  </div>
-  <div class="card">
-    <div class="card-label">Brouillons crees</div>
-    <div class="card-value ok">${stats.brouillons}</div>
-    <div class="card-sub">urgences: ${stats.urgences}</div>
-  </div>
-  <div class="card">
-    <div class="card-label">Erreurs</div>
-    <div class="card-value ${stats.errors > 0 ? 'err' : 'ok'}">${stats.errors}</div>
-    <div class="card-sub">depuis le dernier restart</div>
-  </div>
-  <div class="card">
-    <div class="card-label">historyId</div>
-    <div class="card-value" style="font-size:14px">${lastHistoryId || 'non init'}</div>
-    <div class="card-sub">Gmail watch</div>
-  </div>
-</div>
-
-${!tokenOk ? `
-<div class="section" style="border:2px solid #dc2626">
-  <h2 style="color:#dc2626">⚠️ TOKEN EXPIRÉ — ACTION REQUISE</h2>
-  <p style="font-size:13px;margin-bottom:12px;color:#64748b">Le token OAuth2 Gmail est invalide. Aucun email n'est traite.</p>
-  <a class="action" href="/auth/gmail">Renouveler le token</a>
-</div>` : ''}
-
-<div class="section">
-  <h2>Dernieres erreurs</h2>
-  ${monitoring.errors.length === 0
-    ? '<div style="font-size:13px;color:#94a3b8">Aucune erreur recente ✓</div>'
-    : monitoring.errors.map(e => `
-      <div class="error-row">
-        <span class="error-time">${e.time.substring(11,19)}</span>
-        <span class="error-ctx">[${e.context}]</span>
-        <span>${e.message.substring(0,100)}</span>
-      </div>`).join('')
-  }
-</div>
-
-<div class="section">
-  <h2>Dernier email traite</h2>
-  ${monitoring.lastEmail
-    ? `<div style="font-size:13px">
-        <div><strong>De :</strong> ${monitoring.lastEmail.from}</div>
-        <div><strong>Sujet :</strong> ${monitoring.lastEmail.subject}</div>
-        <div><strong>Categorie :</strong> ${monitoring.lastEmail.categorie}</div>
-        <div style="color:#94a3b8;margin-top:4px">${monitoring.lastEmail.time}</div>
-       </div>`
-    : '<div style="font-size:13px;color:#94a3b8">Aucun email traite depuis le dernier restart</div>'
-  }
-</div>
-
-<div class="refresh">Derniere actualisation : ${new Date().toLocaleTimeString('fr-FR')}</div>
-</body>
-</html>`;
-
-  res.send(html);
-});
-
-// ── DASHBOARD HTML ───────────────────────────────────────────
-const path = require('path');
-app.get('/dashboard', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
-
-// ── API CONFIG — gestion des listes de tri ───────────────────
-const { getConfig, updateConfig, exportConfig } = require('./prefilter');
-
-app.get('/api/config', (_req, res) => res.json(getConfig()));
-
-app.post('/api/config', (req, res) => {
-  try {
-    const result = updateConfig(req.body);
-    res.json({ ok: true, data: result });
-  } catch(e) {
-    res.status(400).json({ ok: false, error: e.message });
-  }
-});
-
-app.get('/api/export', (_req, res) => {
-  res.setHeader('Content-Type', 'text/javascript');
-  res.setHeader('Content-Disposition', 'attachment; filename="prefilter.js"');
-  res.send(exportConfig());
-});
-
-// ── ALERTE TOKEN EXPIRÉ ──────────────────────────────────────
-let _alerteEnvoyee = false; // évite le spam d'alertes
-async function alerteTokenExpire() {
-  if (_alerteEnvoyee) return;
-  _alerteEnvoyee = true;
-  console.error('[AUTH] Token OAuth2 invalide — alerte envoyée');
-  try {
-    // Tenter d'envoyer un email d'alerte via une nouvelle instance OAuth
-    const { google } = require('googleapis');
-    const auth = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-    );
-    auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-    // Si le token est vraiment mort, cet appel échouera aussi — on log seulement
-    console.error('[AUTH] ACTION REQUISE : aller sur /auth/gmail pour renouveler le token');
-    console.error('[AUTH] URL : ' + process.env.RENDER_URL + '/auth/gmail');
-  } catch (e) {
-    console.error("[AUTH] Token expire - impossible d envoyer alerte :", e.message);
-  }
-  // Reset après 1h pour re-alerter si nécessaire
-  setTimeout(() => { _alerteEnvoyee = false; }, 60 * 60 * 1000);
-}
-
 // ── DÉMARRAGE ─────────────────────────────────────────────────
 app.listen(PORT, async () => {
   console.log('═'.repeat(60));
   console.log(`  Gmail Agent — Cabinet 24 Silvestri`);
-  console.log(`  v3.2 — Transcription répondeur OVH intégrée`);
+  console.log(`  v3.3 — Rattrapage répondeur au démarrage`);
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 
-  // Démarrage automatique du watch Gmail à chaque lancement
+  // Démarrage automatique du watch Gmail
   try {
     const result  = await renewWatch();
     lastHistoryId = result.historyId;
@@ -590,4 +441,7 @@ app.listen(PORT, async () => {
     console.error('[watch] Échec démarrage automatique:', err.message);
     console.error('[watch] Appelle manuellement /watch/start si nécessaire');
   }
+
+  // Rattrapage des messages répondeur manqués lors du redémarrage
+  await rattrapageRepondeur();
 });

@@ -402,6 +402,11 @@ app.get('/alertes/factures', async (_req, res) => {
   }
 });
 
+// ── DASHBOARD ─────────────────────────────────────────────────
+app.get('/dashboard', (_req, res) => {
+  res.sendFile(__dirname + '/dashboard.html');
+});
+
 // ── DÉMARRAGE ─────────────────────────────────────────────────
 app.listen(PORT, async () => {
   console.log('═'.repeat(60));

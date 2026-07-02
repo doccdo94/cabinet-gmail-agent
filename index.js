@@ -2,7 +2,7 @@
 // index.js — Serveur Express principal
 // Cabinet 24 Silvestri — Gmail Agent v3.3
 // Nouveauté v3.3 : rattrapage répondeur au démarrage
-//                  (couvre les gaps lors des redémarrages Render)
+// Fix v3.3.1 : replyInThread corrigé dans /test/repondeur
 // ============================================================
 
 require('dotenv').config();
@@ -45,7 +45,7 @@ app.get('/health', (_req, res) => {
   res.json({
     status:    'ok',
     service:   'gmail-agent-cabinet-v3.3',
-    version:   '3.3.0',
+    version:   '3.3.1',
     lastHistoryId,
     uptime:    Math.floor(process.uptime()) + 's',
     timestamp: new Date().toISOString(),
@@ -114,7 +114,7 @@ app.post('/webhook/gmail', async (req, res) => {
       await renewWatch();
       return;
     }
-    lastHistoryId  = historyId;
+    lastHistoryId = historyId;
 
     if (messages.length === 0) {
       console.log('[webhook] Aucun nouveau message INBOX');
@@ -156,13 +156,13 @@ async function processEmail(msg) {
       // ── RÉPONDEUR : transcription Speech-to-Text ───────────
       if (decision.categorie === 'repondeur') {
         try {
-          const authR       = getOAuth2Client();
-          let patientsMap   = null;
+          const authR     = getOAuth2Client();
+          let patientsMap = null;
           try { patientsMap = await getPatientMap(authR); }
           catch (sheetsErr) { console.warn(`[repondeur] Sheets indispo : ${sheetsErr.message}`); }
-          const result      = await traiterRepondeur(msg, patientsMap, {
+          const result    = await traiterRepondeur(msg, patientsMap, {
             replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
-            applyLabelFn: (id, label) => applyLabel(id, label),
+            applyLabelFn:  (id, label) => applyLabel(id, label),
           });
           if (result) {
             console.log(`[repondeur] Transcrit : ${result.identite || 'patient inconnu'}`);
@@ -181,7 +181,6 @@ async function processEmail(msg) {
     const classif = await classifyEmail(msg);
     console.log(`[claude] Catégorie : ${classif.categorie} — ${classif.raison}`);
 
-    // Appliquer le label si précisé
     if (classif.label_gmail) {
       await applyLabel(msg.id, classif.label_gmail);
       console.log(`[claude] Label appliqué : ${classif.label_gmail}`);
@@ -189,8 +188,6 @@ async function processEmail(msg) {
 
     // ── COUCHE 3 : Brouillon patient (Haiku) ──────────────────
     if (classif.generer_brouillon) {
-
-      // Chercher le patient dans l'index Doctolib
       const emailAddr = extractEmail(msg.from);
       const auth      = getOAuth2Client();
       const patient   = await findPatient(emailAddr, auth, msg.from);
@@ -209,11 +206,9 @@ async function processEmail(msg) {
       console.log(`[claude] Brouillon créé — ${patient ? 'personnalisé' : 'générique'}`);
     }
 
-    // ── Urgence : log marqué (SMS mis de côté pour l'instant) ─
     if (classif.urgence) {
       stats.urgences++;
       console.warn(`[URGENT] ${msg.from} — ${msg.subject}`);
-      // S4 optionnel : await envoyerSMS(...)
     }
 
   } catch (err) {
@@ -231,9 +226,6 @@ function extractEmail(from) {
 }
 
 // ── RATTRAPAGE RÉPONDEUR AU DÉMARRAGE ────────────────────────
-// Vérifie les messages répondeur des 3 dernières heures
-// et retranscrit ceux dont le thread ne contient pas encore
-// de réponse du cabinet (= non traités lors d'un redémarrage)
 async function rattrapageRepondeur() {
   try {
     const { google } = require('googleapis');
@@ -256,11 +248,9 @@ async function rattrapageRepondeur() {
     console.log(`[rattrapage] ${messages.length} message(s) répondeur à vérifier`);
 
     for (const m of messages) {
-      // Lire le thread complet pour voir s'il y a déjà une transcription
       const thread = await gmail.users.threads.get({ userId: 'me', id: m.threadId });
       const msgs   = thread.data.messages || [];
 
-      // Si le cabinet a déjà répondu dans ce thread → déjà transcrit
       const dejaTraite = msgs.some(tm => {
         const from = tm.payload.headers.find(h => h.name === 'From')?.value || '';
         return from.includes('24silvestri@gmail.com');
@@ -271,7 +261,6 @@ async function rattrapageRepondeur() {
         continue;
       }
 
-      // Pas encore transcrit → retraiter
       console.log(`[rattrapage] Non traité, transcription en cours : ${m.id}`);
       const msg         = await getEmailContent(m.id);
       const patientsMap = await getPatientMap(auth).catch(() => null);
@@ -281,7 +270,6 @@ async function rattrapageRepondeur() {
         applyLabelFn:  (id, label) => applyLabel(id, label),
       });
 
-      // Marquer comme traité pour ne pas repasser dans processEmail si webhook arrive
       processedMessageIds.add(m.id);
       console.log(`[rattrapage] Transcription envoyée : ${m.id}`);
     }
@@ -302,8 +290,6 @@ setInterval(async () => {
 }, 6 * 24 * 60 * 60 * 1000);
 
 // ── ENDPOINT TEST RÉPONDEUR ──────────────────────────────────
-// GET /test/repondeur?numero=0782481900
-// ou GET /test/repondeur?sujet=Message+vocal+du
 app.get('/test/repondeur', async (req, res) => {
   const { numero, sujet } = req.query;
   if (!numero && !sujet) {
@@ -312,42 +298,34 @@ app.get('/test/repondeur', async (req, res) => {
 
   try {
     const { google } = require('googleapis');
-    const testAuth  = getOAuth2Client();
-    const gmail = google.gmail({ version: 'v1', auth: testAuth });
+    const auth  = getOAuth2Client();
+    const gmail = google.gmail({ version: 'v1', auth });
 
     const query = numero
       ? `subject:"Message vocal du ${numero}" in:anywhere`
       : `subject:"${sujet}" in:anywhere`;
 
     console.log(`[test] Recherche : ${query}`);
-    const listRes = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 1 });
+    const listRes  = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 1 });
     const messages = listRes.data.messages || [];
 
     if (messages.length === 0) {
       return res.status(404).json({ error: `Aucun message trouvé pour : ${query}` });
     }
 
-    const msgId = messages[0].id;
+    const msgId  = messages[0].id;
     console.log(`[test] Message trouvé : ${msgId}`);
 
-    const { google: googleLib } = require('googleapis');
-    const directAuth  = getOAuth2Client();
-    const gmailDirect = googleLib.gmail({ version: 'v1', auth: directAuth });
-    const rawMsg = await gmailDirect.users.messages.get({
-      userId: 'me',
-      id:     msgId,
-      format: 'full',
-    });
-
+    const rawMsg = await gmail.users.messages.get({ userId: 'me', id: msgId, format: 'full' });
     const headers = rawMsg.data.payload.headers;
-    const getH = (n) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || '';
+    const getH   = (n) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || '';
 
     const attachments = [];
     async function walkParts(part) {
       if (part.filename && /\.(mp3|wav|ogg|m4a|flac)$/i.test(part.filename)) {
         let data = part.body?.data;
         if (!data && part.body?.attachmentId) {
-          const att = await gmailDirect.users.messages.attachments.get({
+          const att = await gmail.users.messages.attachments.get({
             userId: 'me', messageId: msgId, id: part.body.attachmentId,
           });
           data = att.data.data;
@@ -372,12 +350,13 @@ app.get('/test/repondeur', async (req, res) => {
       body:        '',
       attachments,
     };
-    const auth2       = getOAuth2Client();
-    const patientsMap = await getPatientMap(auth2);
 
+    const patientsMap = await getPatientMap(auth).catch(() => null);
+
+    // ── CORRECTION : replyInThread (et non replyEmail) ────────
     const result = await traiterRepondeur(msg, patientsMap, {
-      replyEmail,
-      applyLabelFn: (msgId, label) => applyLabel(msgId, label),
+      replyInThread: (threadId, sujet, text, html) => replyInThread(threadId, sujet, text, html),
+      applyLabelFn:  (id, label) => applyLabel(id, label),
     });
 
     if (result) {
@@ -431,10 +410,9 @@ app.listen(PORT, async () => {
   console.log(`  Port : ${PORT}`);
   console.log('═'.repeat(60));
 
-  // Démarrage automatique du watch Gmail
   try {
-    const result  = await renewWatch();
-    lastHistoryId = result.historyId;
+    const result     = await renewWatch();
+    lastHistoryId    = result.historyId;
     const expiration = new Date(parseInt(result.expiration)).toLocaleString('fr-FR');
     console.log(`[watch] Démarré automatiquement — expire le ${expiration}`);
   } catch (err) {
@@ -442,6 +420,5 @@ app.listen(PORT, async () => {
     console.error('[watch] Appelle manuellement /watch/start si nécessaire');
   }
 
-  // Rattrapage des messages répondeur manqués lors du redémarrage
   await rattrapageRepondeur();
 });

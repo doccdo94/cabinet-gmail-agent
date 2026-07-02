@@ -422,3 +422,71 @@ app.listen(PORT, async () => {
 
   await rattrapageRepondeur();
 });
+
+// ── SCAN RÉPONDEUR (appelé par le dashboard) ─────────────────
+// GET /api/scan-repondeur?heures=24
+app.get('/api/scan-repondeur', async (req, res) => {
+  const heures = Math.min(parseInt(req.query.heures) || 24, 48);
+  try {
+    const { google } = require('googleapis');
+    const auth  = getOAuth2Client();
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const apres = Math.floor((Date.now() - heures * 60 * 60 * 1000) / 1000);
+    const liste = await gmail.users.messages.list({
+      userId:     'me',
+      q:          `from:repondeur after:${apres}`,
+      maxResults: 20,
+    });
+
+    const messages  = liste.data.messages || [];
+    const resultats = [];
+    let transcrits  = 0;
+
+    for (const m of messages) {
+      const thread = await gmail.users.threads.get({ userId: 'me', id: m.threadId });
+      const msgs   = thread.data.messages || [];
+
+      // Extraire le sujet pour affichage
+      const sujet = msgs[0]?.payload?.headers?.find(h => h.name === 'Subject')?.value || m.id;
+      const numeroMatch = sujet.match(/Message vocal du\s+(.+)/i);
+      const numero = numeroMatch ? numeroMatch[1] : null;
+
+      // Déjà transcrit ?
+      const dejaTraite = msgs.some(tm => {
+        const from = tm.payload.headers.find(h => h.name === 'From')?.value || '';
+        return from.includes('24silvestri@gmail.com');
+      });
+
+      if (dejaTraite) {
+        resultats.push({ sujet, numero, statut: 'deja_traite' });
+        continue;
+      }
+
+      // Transcrire
+      try {
+        const msg         = await getEmailContent(m.id);
+        const patientsMap = await getPatientMap(auth).catch(() => null);
+        const result      = await traiterRepondeur(msg, patientsMap, {
+          replyInThread: (threadId, suj, text, html) => replyInThread(threadId, suj, text, html),
+          applyLabelFn:  (id, label) => applyLabel(id, label),
+        });
+        processedMessageIds.add(m.id);
+        transcrits++;
+        resultats.push({
+          sujet,
+          numero,
+          statut:        'transcrit',
+          transcription: result?.transcription?.substring(0, 100) || '',
+        });
+      } catch (err) {
+        resultats.push({ sujet, numero, statut: 'erreur', transcription: err.message });
+      }
+    }
+
+    res.json({ ok: true, transcrits, resultats });
+  } catch (err) {
+    console.error('[scan-repondeur] Erreur:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});

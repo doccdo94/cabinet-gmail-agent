@@ -32,7 +32,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
 .nav-label{padding:4px 18px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:var(--font-head)}
 .main{flex:1;padding:24px;overflow-y:auto}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
-.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
 .metric-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-family:var(--font-head)}
 .metric-value{font-size:22px;font-weight:500;line-height:1}
@@ -53,6 +52,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
 .btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:3px 7px}.btn-danger:hover{background:rgba(255,79,106,.1);border-color:var(--danger)}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn-ghost:hover{color:var(--text)}
 .btn-export{background:var(--accent2);color:#0a1a14;font-weight:700}.btn-export:hover{background:#00bc96}
+.btn-warn{background:rgba(232,160,32,.15);color:var(--warn);border:1px solid rgba(232,160,32,.3)}.btn-warn:hover{background:rgba(232,160,32,.25)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
 input,select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--font);font-size:12px;outline:none;transition:border .15s}
 input:focus,select:focus{border-color:var(--accent)}
 input::placeholder{color:var(--text3)}
@@ -61,22 +62,21 @@ input::placeholder{color:var(--text3)}
 .chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);margin:2px;gap:4px;cursor:pointer}
 .chip:hover{border-color:var(--danger);color:var(--danger)}
 .badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
-.log-row{display:flex;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--font)}
-.log-row:last-child{border-bottom:none}
-.log-time{color:var(--text3);min-width:48px}
-.log-ctx{color:var(--accent);min-width:80px}
-.log-msg{color:var(--text2);flex:1}
-.alert-bar{background:rgba(255,79,106,.1);border:1px solid rgba(255,79,106,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--danger)}
 .note{background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn);line-height:1.6}
 .quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
 .quick-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;text-decoration:none;display:block}
 .quick-card:hover{background:var(--surface2);border-color:var(--accent)}
 .quick-icon{font-size:22px;margin-bottom:6px;display:block}
 .quick-label{font-family:var(--font-head);font-size:12px;font-weight:600;color:var(--text2)}
-.section-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;font-family:var(--font-head)}
 .fournisseur-block{border-bottom:1px solid var(--border);padding:10px 14px}
 .fournisseur-block:last-of-type{border-bottom:none}
 .rep-result{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;font-size:12px;min-height:60px;color:var(--text2);line-height:1.6}
+.scan-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px}
+.scan-item:last-child{border-bottom:none}
+.scan-num{color:var(--accent);font-weight:500;min-width:110px}
+.scan-status{margin-left:auto;flex-shrink:0}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -107,24 +107,22 @@ input::placeholder{color:var(--text3)}
     <div class="nav-item" onclick="showTab('config',this)">⚙️ Configuration</div>
   </nav>
 
-  <main class="main" id="main-content">
-    <!-- contenu injecté par JS -->
-  </main>
+  <main class="main" id="main-content"></main>
 </div>
 
 <script>
-const BASE = '';  // même origine — servi par Render
+const BASE = '';
 let CFG = { correspondants:[], labos:[], interne:[], fournisseurs:[] };
 let currentTab = 'monitoring';
 
 const TABS = {
-  monitoring: renderMonitoring,
+  monitoring:     renderMonitoring,
   correspondants: () => renderEmailList('correspondants','👨‍⚕️ Correspondants cliniques','Confrères et spécialistes — label Correspondants appliqué automatiquement','new-corr'),
-  labos: () => renderEmailList('labos','🧪 Labos','Tri intelligent : facture ou clinique selon le sujet','new-labo'),
-  interne: () => renderEmailList('interne','🏠 Adresses internes','Ces adresses sont ignorées par le système IA','new-int'),
-  fournisseurs: renderFournisseurs,
-  repondeur: renderRepondeur,
-  config: renderConfig,
+  labos:          () => renderEmailList('labos','🧪 Labos','Tri intelligent : facture ou clinique selon le sujet','new-labo'),
+  interne:        () => renderEmailList('interne','🏠 Adresses internes','Ces adresses sont ignorées par le système IA','new-int'),
+  fournisseurs:   renderFournisseurs,
+  repondeur:      renderRepondeur,
+  config:         renderConfig,
 };
 
 function showTab(name, el) {
@@ -139,7 +137,7 @@ function render() { TABS[currentTab]?.(); }
 // ── MONITORING ────────────────────────────────────────────────
 function renderMonitoring() {
   document.getElementById('main-content').innerHTML = `
-    <div class="grid4" id="metrics-grid">
+    <div class="grid4">
       <div class="metric"><div class="metric-label">Token OAuth2</div><div class="metric-value val-ok" id="m-token">—</div><div class="metric-sub">Gmail</div></div>
       <div class="metric"><div class="metric-label">Emails traités</div><div class="metric-value" id="m-total">—</div><div class="metric-sub" id="m-pf">—</div></div>
       <div class="metric"><div class="metric-label">Brouillons IA</div><div class="metric-value val-ok" id="m-br">—</div><div class="metric-sub" id="m-urg">urgences: 0</div></div>
@@ -152,10 +150,6 @@ function renderMonitoring() {
         <div class="row"><span class="row-label">Sujet</span><span class="row-val" id="m-subj">—</span></div>
         <div class="row"><span class="row-label">Traité le</span><span class="row-val" id="m-time">—</span></div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Dernières erreurs</span></div>
-      <div id="m-errors" class="card-body"><div class="log-row"><span class="log-msg" style="color:var(--text3)">Chargement...</span></div></div>
     </div>`;
   fetchStats();
 }
@@ -175,26 +169,7 @@ async function fetchStats() {
     el('m-err').className = 'metric-value '+(errs>0?'val-err':'val-ok');
     el('m-up').textContent = 'uptime: '+(d.uptime??'—');
     setStatus('ok');
-    fetchErrors();
   } catch(e) { setStatus('err'); }
-}
-
-async function fetchErrors() {
-  try {
-    const r = await fetch(BASE+'/monitoring');
-    const html = await r.text();
-    const doc = new DOMParser().parseFromString(html,'text/html');
-    const from = doc.querySelector('#last-email-from');
-    const subj = doc.querySelector('#last-email-subject');
-    const time = doc.querySelector('#last-email-time');
-    const cat  = doc.querySelector('#last-email-cat');
-    const errs = doc.querySelector('#errors-list');
-    if(from) el('m-from').textContent = from.textContent||'—';
-    if(subj) el('m-subj').textContent = subj.textContent||'—';
-    if(time) el('m-time').textContent = time.textContent||'—';
-    if(cat)  el('m-cat').textContent  = cat.textContent||'—';
-    if(errs) el('m-errors').innerHTML = errs.innerHTML;
-  } catch(e) {}
 }
 
 // ── LISTES EMAIL ──────────────────────────────────────────────
@@ -224,7 +199,6 @@ function renderFournisseurs() {
   const items = CFG.fournisseurs || [];
   let html = `<div class="note">Emails détectés par l'adresse expéditeur (fragment from:). Modifier ici puis exporter.</div>
   <div class="card"><div class="card-header"><span class="card-title">📦 Fournisseurs</span></div><div class="card-body">`;
-
   items.forEach((f,i) => {
     html += `<div class="fournisseur-block">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -232,7 +206,7 @@ function renderFournisseurs() {
         <button class="btn btn-danger" onclick="removeItem('fournisseurs',${i})">Supprimer</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;margin-bottom:6px">
-        ${f.patterns.map((p,j) => `<span class="chip" onclick="removePattern(${i},${j})" title="Cliquer pour supprimer">${p} ×</span>`).join('')}
+        ${f.patterns.map((p,j) => `<span class="chip" onclick="removePattern(${i},${j})">${p} ×</span>`).join('')}
       </div>
       <div style="display:flex;gap:6px">
         <input type="text" id="kw-${i}" placeholder="+ mot-clé from:" style="flex:1;font-size:11px" onkeydown="if(event.key==='Enter')addPattern(${i},'kw-${i}')">
@@ -240,7 +214,6 @@ function renderFournisseurs() {
       </div>
     </div>`;
   });
-
   html += `</div>
     <div class="add-row" style="flex-wrap:wrap;gap:6px">
       <input type="text" id="new-f-label" placeholder="Nouveau label (ex: CPAM)" style="width:160px">
@@ -249,33 +222,147 @@ function renderFournisseurs() {
     </div>
   </div>
   <button class="btn btn-export" onclick="exporterConfig()" style="width:100%;justify-content:center">⬇ Exporter prefilter.js</button>`;
-
   document.getElementById('main-content').innerHTML = html;
 }
 
 // ── RÉPONDEUR ─────────────────────────────────────────────────
 function renderRepondeur() {
   document.getElementById('main-content').innerHTML = `
+
+    <!-- SCAN boîte mail -->
     <div class="card">
-      <div class="card-header"><span class="card-title">🎙️ Tester une transcription</span><span class="badge" style="background:rgba(79,124,255,.15);color:var(--accent);border:1px solid rgba(79,124,255,.3)">Speech-to-Text</span></div>
+      <div class="card-header">
+        <span class="card-title">🔍 Scanner les messages non transcrits</span>
+        <span class="badge" style="background:rgba(232,160,32,.15);color:var(--warn);border:1px solid rgba(232,160,32,.3)">Rattrapage manuel</span>
+      </div>
+      <div class="card-body" style="padding:14px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">
+          Cherche les messages vocaux OVH des dernières <strong style="color:var(--text)">24 heures</strong> dont le fil ne contient pas encore de transcription.<br>
+          Utile après un redémarrage Render qui aurait laissé passer un message.
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+          <select id="scan-hours" style="width:160px">
+            <option value="3">3 dernières heures</option>
+            <option value="6">6 dernières heures</option>
+            <option value="24" selected>24 dernières heures</option>
+            <option value="48">48 dernières heures</option>
+          </select>
+          <button class="btn btn-warn" id="scan-btn" onclick="lancerScan()">🔍 Scanner et transcrire</button>
+        </div>
+        <div id="scan-result" style="display:none">
+          <div class="card" style="margin-bottom:0">
+            <div class="card-header"><span class="card-title" id="scan-title">Résultats</span></div>
+            <div class="card-body" id="scan-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEST numéro individuel -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎙️ Forcer la transcription d'un numéro</span>
+        <span class="badge" style="background:rgba(79,124,255,.15);color:var(--accent);border:1px solid rgba(79,124,255,.3)">Speech-to-Text</span>
+      </div>
       <div class="card-body" style="padding:14px">
         <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input type="text" id="tel-input" placeholder="Numéro de téléphone — ex: 0647832898" style="flex:1">
+          <input type="text" id="tel-input" placeholder="ex: 0647832898" style="flex:1">
           <button class="btn btn-primary" onclick="testerRepondeur()">▶ Transcrire</button>
         </div>
         <div class="rep-result" id="rep-result">Entrez un numéro pour forcer la transcription d'un message vocal existant dans Gmail.</div>
       </div>
     </div>
+
+    <!-- INFO fonctionnement -->
     <div class="card">
       <div class="card-header"><span class="card-title">Fonctionnement</span></div>
       <div class="card-body">
-        <div class="row"><span class="row-label">Détection</span><span class="row-val">ovhcloud / répondeur dans l'expéditeur</span></div>
-        <div class="row"><span class="row-label">Labels</span><span class="row-val">Répondeur à traiter + À traiter</span></div>
+        <div class="row"><span class="row-label">Détection auto</span><span class="row-val">ovhcloud / répondeur dans l'expéditeur</span></div>
+        <div class="row"><span class="row-label">Labels appliqués</span><span class="row-val">Répondeur à traiter + À traiter</span></div>
         <div class="row"><span class="row-label">Transcription</span><span class="row-val">Google Speech-to-Text v1 · fr-FR · phone_call</span></div>
-        <div class="row"><span class="row-label">Résultat</span><span class="row-val">Réponse dans le fil OVH (pas de no-reply)</span></div>
+        <div class="row"><span class="row-label">Résultat</span><span class="row-val">Réponse dans le fil OVH (threadId injecté)</span></div>
         <div class="row"><span class="row-label">Identification</span><span class="row-val">Index Doctolib — numéro → patient</span></div>
+        <div class="row"><span class="row-label">Rattrapage auto</span><span class="row-val">3h glissantes à chaque redémarrage Render</span></div>
       </div>
     </div>`;
+}
+
+// ── SCAN ──────────────────────────────────────────────────────
+async function lancerScan() {
+  const heures = document.getElementById('scan-hours').value;
+  const btn    = document.getElementById('scan-btn');
+  const result = document.getElementById('scan-result');
+  const list   = document.getElementById('scan-list');
+  const title  = document.getElementById('scan-title');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Scan en cours...';
+  result.style.display = 'none';
+
+  try {
+    const r = await fetch(BASE + '/api/scan-repondeur?heures=' + heures);
+    const d = await r.json();
+
+    result.style.display = 'block';
+
+    if (!d.ok) {
+      title.textContent = 'Erreur';
+      list.innerHTML = `<div class="scan-item"><span style="color:var(--danger)">${d.error || 'Erreur inconnue'}</span></div>`;
+      return;
+    }
+
+    const items = d.resultats || [];
+    title.textContent = `${items.length} message(s) vérifié(s) — ${d.transcrits} transcrit(s)`;
+
+    if (items.length === 0) {
+      list.innerHTML = `<div class="scan-item"><span style="color:var(--text3)">Aucun message répondeur dans cette période.</span></div>`;
+    } else {
+      list.innerHTML = items.map(item => `
+        <div class="scan-item">
+          <div style="flex:1">
+            <div class="scan-num">${item.numero || item.sujet}</div>
+            <div style="color:var(--text2);font-size:11px;margin-top:3px">${item.transcription || ''}</div>
+          </div>
+          <div class="scan-status">
+            ${item.statut === 'transcrit'
+              ? '<span class="badge" style="background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.3)">✓ Transcrit</span>'
+              : item.statut === 'deja_traite'
+              ? '<span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border)">Déjà fait</span>'
+              : '<span class="badge" style="background:rgba(255,79,106,.15);color:var(--danger);border:1px solid rgba(255,79,106,.3)">Erreur</span>'
+            }
+          </div>
+        </div>`).join('');
+    }
+  } catch(e) {
+    result.style.display = 'block';
+    title.textContent = 'Erreur réseau';
+    list.innerHTML = `<div class="scan-item"><span style="color:var(--danger)">${e.message}</span></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Scanner et transcrire';
+  }
+}
+
+// ── TEST NUMÉRO ───────────────────────────────────────────────
+async function testerRepondeur() {
+  const num = document.getElementById('tel-input')?.value.trim();
+  if(!num) return;
+  const box = document.getElementById('rep-result');
+  box.textContent = 'Transcription en cours...';
+  box.style.color = 'var(--text2)';
+  try {
+    const r = await fetch(BASE+'/test/repondeur?numero='+encodeURIComponent(num));
+    const d = await r.json();
+    if(d.ok) {
+      box.innerHTML = '<strong style="color:var(--ok)">'+(d.identite||'Patient inconnu')+'</strong><br><span style="color:var(--text)">'+(d.transcription||'')+'</span>';
+    } else {
+      box.textContent = d.error||d.message||'Aucun message trouvé';
+      box.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    box.textContent = 'Erreur : '+e.message;
+    box.style.color = 'var(--danger)';
+  }
 }
 
 // ── CONFIG ────────────────────────────────────────────────────
@@ -365,29 +452,7 @@ async function exporterConfig() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href=url; a.download='prefilter.js'; a.click();
-    alert('prefilter.js téléchargé — pusher sur GitHub pour rendre permanent après redémarrage.');
   } catch(e) { alert('Erreur export : '+e.message); }
-}
-
-async function testerRepondeur() {
-  const num = document.getElementById('tel-input')?.value.trim();
-  if(!num) return;
-  const el = document.getElementById('rep-result');
-  el.textContent = 'Transcription en cours...';
-  el.style.color = 'var(--text2)';
-  try {
-    const r = await fetch(BASE+'/test/repondeur?numero='+encodeURIComponent(num));
-    const d = await r.json();
-    if(d.ok) {
-      el.innerHTML = '<strong style="color:var(--ok)">'+(d.identite||'Patient inconnu')+'</strong><br><span style="color:var(--text)">'+(d.transcription||'')+'</span>';
-    } else {
-      el.textContent = d.error||d.message||'Aucun message trouvé';
-      el.style.color = 'var(--danger)';
-    }
-  } catch(e) {
-    el.textContent = 'Erreur : '+e.message;
-    el.style.color = 'var(--danger)';
-  }
 }
 
 function setStatus(state) {
@@ -405,7 +470,6 @@ async function refresh() {
 
 function el(id) { return document.getElementById(id); }
 
-// ── INIT ──────────────────────────────────────────────────────
 refresh();
 setInterval(refresh, 30000);
 </script>
